@@ -131,19 +131,23 @@ docs/archive/                          # 旧架构文档（只读）
 | `dim_stock` | `ts_code, valid_from` | 待建 | SCD2 主档；ST/名称按历史生效，不用"今天"的名字 |
 | `dim_board_member` | `trade_date, board_code, con_code` | 待建 | 同花顺板块成分快照 |
 | `fact_daily_bar` | `trade_date, ts_code` | 待建 | 股票 + 指数日线 |
-| `fact_stk_limit` | `trade_date, ts_code` | 待建 | 涨跌停价（本地判定基准） |
-| `fact_limit_detail` | `trade_date, ts_code, limit_type` | 待建 | 涨停/跌停/炸板结构（封单、开板次数、连板数） |
+| `fact_stk_limit` | `trade_date, ts_code` | 待建 | 全市场价格带（up/down_limit）。用途：含 ST 的广度、昨涨停反馈、一字/回封判定、官方池交叉校验；**不是第二份涨停名单** |
+| `fact_limit_detail` | `trade_date, ts_code, limit_type` | 待建 | 官方涨停/跌停/炸板池（不含 ST）：封单、开板次数、连板数、几天几板 |
 | `fact_board_rank` | `trade_date, board_code` | 待建 | 板块榜（涨幅/涨停家数/最高板/持续天数） |
 | `fact_kpl` | `trade_date, ts_code, tag` | 待建 | 开盘啦涨停细节 + 题材标签 |
 | `fact_breadth` | `trade_date` | 待建 | 广度指标（涨跌家数、昨涨停溢价、成交额） |
 | `watchlist_daily` | `experiment_id, owner, trade_date, ts_code` | **已建** | 每日全量清单（不可变） |
 | `watchlist_change` | 无主键（日志） | **已建** | 当日变更：add/remove/update + 原因 |
-| `portfolio_daily` | `experiment_id, trade_date` | 待建 | 现金/总资产快照 |
-| `position_daily` | `experiment_id, trade_date, ts_code` | 待建 | 持仓快照 |
+| `portfolio_daily` | `experiment_id, trade_date` | 待建 | **账户-日**：现金、市值、总资产（每天 1 行） |
+| `position_daily` | `experiment_id, trade_date, ts_code` | 待建 | **账户-日-股票**：数量、成本、收盘价、市值（每天 N 行） |
 | `order_intent` | `run_id, ts_code` | 待建 | Trader 订单意图（可由 JSON 落表） |
 | `fill` | `run_id, ts_code, fill_time` | 待建 | 人工 Broker 成交回填 |
 | `metric_theme_state` | `trade_date, theme_id` | v5.1 | 题材阶段/强度/切换窗口 |
-| `metric_carrier_state` | `trade_date, ts_code` | v5.1 | 载体角色/连板/开板/封单 |
+| `metric_carrier_state` | `trade_date, ts_code` | v5.1 | 载体状态；**定义待定**（2026-10-30 用户确认后续再定，先留表名/占位） |
+
+`fact_limit_flag` 不单独建表：它是 `fact_daily_bar ⨝ fact_stk_limit` 的视图（本地判定），
+再 left join `fact_limit_detail` 取官方字段。这样"是否涨停"只有一个口径来源，不再出现
+"官方池 / 本地标记 / 广度计数"三套数字。
 
 ### 5.3 核心 DDL
 
