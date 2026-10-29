@@ -42,6 +42,10 @@ INDEX_NAMES = {"399317.SZ": "国证A指(全A)", "000001.SH": "上证指数", "39
                "399001.SZ": "深证成指"}
 GAIN_WINDOWS = [5, 10, 20]   # 区间涨幅窗口（个交易日）
 
+#: 非数据层产物：即使历史目录里残留，也不允许进入 snapshot 清单。
+#: watchlist 是 state（Curator 按 as_of 渲染），Scout 只产客观数据。
+EXCLUDED_DERIVED = frozenset({"watchlist_today"})
+
 # 每日管道必需的接口及其 raw 文件命名规则（key 生成器，来自 catchup.py）。
 # daily 特殊：大 payload，需分页 + 抢救式重试，不在此表（由 fetch_full_date 处理）。
 # limit_step（连板天梯）2026-10-28 用户拍板保留并入回补清单。
@@ -1258,20 +1262,9 @@ class Scout:
         panel = ROOT / "data" / "curated" / date_dash / "index_panel.csv"
         if panel.exists():
             save(pd.read_csv(panel), "index_panel", "第一层指数量能")
-        # 关注列表不在这里落 derived 表：watchlist 是 state，由 Curator 渲染 digest。
-        # 但"载体生命周期"的候选集需要关注票，这里按 T-1 冻结快照只读取代码，
-        # 不读 current（PIT），缺失则视为空集。
-        def _watchlist_codes(day: str) -> set[str]:
-            from .core import StateStore
+        # Scout 不读任何 state：关注列表由 Curator 渲染 digest 时按 as_of 读取；
+        # 载体生命周期只从涨停结构（客观数据）取候选，不掺 watchlist。
 
-            path = StateStore(self.ws).as_of_path(
-                "state/watchlist/judge/current.yaml", day,
-                "state/watchlist/judge/history", strict="before")
-            if path is None:
-                return set()
-            state = load_yaml(path)
-            return {str(s["ts_code"]) for s in (state.get("stocks") or [])
-                    if str(s.get("status", "关注")) == "关注" and s.get("ts_code")}
         # 板块榜（含规模阈值过滤）
         boards = con.execute("SELECT * FROM fact_board_rank WHERE trade_date = ?",
                              [date_dash]).fetchdf()
@@ -1353,7 +1346,7 @@ class Scout:
                 f"FROM fact_limit_detail WHERE limit_type='U' AND trade_date IN ({_ph(lb)})",
                 lb).fetchdf()
             today_det = det[det["trade_date"] == date_dash] if not det.empty else pd.DataFrame()
-            cand: set[str] = _watchlist_codes(date_dash)
+            cand: set[str] = set()
             if not today_det.empty:
                 cand |= set(today_det[today_det["limit_times"] >= 2]["ts_code"])
             recent5 = det[det["trade_date"].isin(lb[:5])] if not det.empty else pd.DataFrame()
@@ -1536,6 +1529,9 @@ class Scout:
         derived_files = {}
         derived_rows = {}
         for path in sorted(derived_dir.glob("*.csv")):
+            if path.stem in EXCLUDED_DERIVED:
+                print(f"[snapshot] 跳过非数据层产物：{path.name}")
+                continue
             rows = csv_rows(path)
             derived_rows[path.stem] = rows
             derived_files[path.stem] = {**self.ws.artifact_ref(path), "rows": rows}
@@ -1544,10 +1540,7 @@ class Scout:
 
         readiness = Fetcher(workspace=self.ws).status(date)
         gaps: list[str] = list(readiness["gaps"])
-        expected = []
-        for name in selectors.get("groups", {}):
-            if name != "watchlist":
-                expected.append(name)
+        expected = list(selectors.get("groups", {}) or {})
         for name in ("ceiling", "carrier_lifecycle"):
             if selectors.get(name if name == "ceiling" else "lifecycle"):
                 expected.append(name)
@@ -1579,6 +1572,10 @@ class Scout:
         scout_impl = ROOT / "autotrader" / "scout.py"
         derived_code_version = f"scout:{sha256_file(scout_impl)[:16]}"
         generated_day = datetime.now().astimezone().date().isoformat()
+        status = readiness["status"]
+        if status == "ready" and gaps:
+            # 数据齐但派生表缺（配置要求生成）→ 同样不能算 complete
+            status = "degraded"
         manifest = {
             "snapshot_version": "s3.1",
             "trade_date": date_dash,
@@ -1586,7 +1583,7 @@ class Scout:
             "data_as_of": date_dash,
             "derived_code_version": derived_code_version,
             "backfilled": generated_day != date_dash,
-            "status": readiness["status"],
+            "status": status,
             "readiness": {
                 "version": readiness.get("readiness_version", "r1.0"),
                 "path": f"data/meta/readiness/{date_dash}.yaml",

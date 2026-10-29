@@ -94,6 +94,17 @@ def test_upsert_idempotent() -> None:
     con.close()
 
 
+def test_scout_does_not_touch_state() -> None:
+    """Scout 只产客观数据：不得读写 state/watchlist 或 state/portfolio。"""
+    import inspect
+
+    source = inspect.getsource(scout)
+    assert "state/watchlist" not in source
+    assert "state/portfolio" not in source
+    # 唯一允许出现 watchlist_today 的地方是"排除清单"
+    assert source.count("watchlist_today") == 1
+
+
 # --------------------------------------------------------------------------- #
 # 稳定性回归：10-28 快照数据字段与冻结基线一致
 # --------------------------------------------------------------------------- #
