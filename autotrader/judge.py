@@ -159,11 +159,12 @@ class Judge:
         ]
         for item in task["inputs"]:
             lines.append(f"| {item['path']} | {item['sha256'][:16]}… |")
+        prev = task["previous_review"] or "无（首日或缺失）"
         lines += [
             "",
             "## 操作要求",
             "",
-            f"1. 通读下方内嵌 Digest；按需读因子文件与上一日 review（{task['previous_review']}）。",
+            f"1. 通读下方内嵌 Digest；按需读因子文件与上一日 review（{prev}）。",
             f"2. 受控查询仅限：{('、'.join(task['allowed_queries'])) or '无'}"
             f"（`auto-trader curator query --request <task.yaml>`，须引用本包 digest hash）。",
             f"3. 输出 review.md 与 review.json 到 `{task['outputs']['review_json']}` 同级目录。",
