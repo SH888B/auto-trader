@@ -1,0 +1,52 @@
+# 列名字典：Curator 渲染 digest 时的中文表头、单位与格式（视图层专用，CSV 原始列名不动）
+# fmt: price2=价格两位小数 | pct2=百分比两位小数 | int0=整数 | yi5=千元→亿元两位 | yi8=元→亿元两位
+# 溯源列（selectors_version / trade_date / source_file / ingested_at）与 change（绝对元数）默认不进入 digest，
+# 其中 selectors_version 与 trade_date 提升到 digest 头部 metadata。
+version: cd1.0
+exclude_columns: [selectors_version, trade_date, source_file, ingested_at, change]
+columns:
+  ts_code: { zh: 代码 }
+  name: { zh: 名称 }
+  board_code: { zh: 板块代码 }
+  board_name: { zh: 板块名称 }
+  rank: { zh: 排名, fmt: int0 }
+  open: { zh: 开盘, fmt: price2 }
+  high: { zh: 最高, fmt: price2 }
+  low: { zh: 最低, fmt: price2 }
+  close: { zh: 收盘, fmt: price2 }
+  pre_close: { zh: 昨收, fmt: price2 }
+  pct_chg: { zh: 涨跌幅%, fmt: pct2 }
+  vol: { zh: 成交量, fmt: int0 }
+  amount: { zh: 成交额(亿), fmt: yi5 }
+  fd_amount: { zh: 封单额(亿), fmt: yi8 }
+  float_mv: { zh: 流通市值(亿), fmt: yi8 }
+  turnover_ratio: { zh: 换手率%, fmt: pct2 }
+  limit_type: { zh: 方向 }
+  industry: { zh: 行业 }
+  first_time: { zh: 首次封板时间, fmt: int0 }
+  last_time: { zh: 最后封板时间, fmt: int0 }
+  open_times: { zh: 开板次数, fmt: int0 }
+  up_stat: { zh: 涨停统计 }
+  limit_times: { zh: 连板数, fmt: int0 }
+  structure: { zh: 封板结构 }
+  up_nums: { zh: 涨停家数, fmt: int0 }
+  cons_nums: { zh: 连板家数, fmt: int0 }
+  cons_count: { zh: 成分股数, fmt: int0 }
+  days: { zh: 上榜天数, fmt: int0, note: tushare limit_cpt_list 官方字段，板块登上涨停概念榜的持续天数 }
+  track: { zh: 赛道 }
+  window_max: { zh: 窗口纪录(板), fmt: int0 }
+  record_holder: { zh: 纪录保持者 }
+  record_date: { zh: 纪录日期 }
+  today_max: { zh: 今日最高(板), fmt: int0 }
+  breaker: { zh: 破纪录者 }
+  开盘溢价%: { zh: 开盘溢价% }
+  关注类别: { zh: 关注类别, note: 涨停聚焦规则标签（封单最大/最高板/20cm连板/行业最高板/首板三王/20cm）}
+  # 中文字段名（index_panel 等 Scout 已命名的列）：只补格式，不改名
+  收盘: { zh: 收盘, fmt: price2 }
+  涨跌幅%: { zh: 涨跌幅%, fmt: pct2 }
+  MA5: { zh: MA5, fmt: price2 }
+  MA10: { zh: MA10, fmt: price2 }
+  MA20: { zh: MA20, fmt: price2 }
+  成交额亿: { zh: 成交额(亿), fmt: pct2 }
+  封单亿: { zh: 封单(亿), fmt: pct2 }
+  涨跌幅: { zh: 涨跌幅%, fmt: pct2 }

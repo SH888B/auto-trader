@@ -1,0 +1,21 @@
+registry_version: f3.1
+lifecycle: [假设, 验证中, 已入框架, 已废弃]
+rule: 因子必须版本化并由 Profile 显式组合；每日列表状态保存在 state，不硬编码进 prompt
+factors:
+  - { id: F001, version: v1.0, name: 高标归类按高度不按板块, category: 选股象限, applies_to: [judge], file: factors/review/F001_高标归类按高度不按板块.md, status: 已入框架, origin: E001-2026-10-20, evidence: [E001 review 2026-10-20, E001 review 2026-10-21] }
+  - { id: F002, version: v1.0, name: 主线切换日不接旧梯队, category: 时点信号, applies_to: [trader], file: factors/strategy/F002_主线切换日不接旧梯队.md, status: 已入框架, origin: E001-2026-10-21, evidence: [E001 review 2026-10-21] }
+  - { id: F003, version: v1.0, name: 分歧预期日关闭2板以上接力, category: 风控条件, applies_to: [trader], file: factors/strategy/F003_分歧预期日关闭2板以上接力.md, status: 已入框架, origin: E001-2026-10-21/10-26, evidence: [E001 review 2026-10-21, E001 review 2026-10-26] }
+  - { id: F004, version: v1.0, name: kill_switch双条件制, category: 风控条件, applies_to: [trader], file: factors/strategy/F004_kill_switch双条件制.md, status: 已入框架, origin: E001-2026-10-23, evidence: [E001 review 2026-10-23] }
+  - { id: F005, version: v1.0, name: 低吸挂价分场景, category: 风控条件, applies_to: [trader], file: factors/strategy/F005_低吸挂价分场景.md, status: 验证中, origin: E001, evidence: [E001 review 2026-10-22/10-23/10-26], experiment: [E003] }
+  - { id: F006, version: v1.0, name: 核心票锚定制度, category: 选股象限, applies_to: [judge], file: factors/review/F006_核心票锚定制度.md, status: 假设, origin: E002-delta, evidence: [E002 delta 2026-10-20/10-22], experiment: [E003] }
+  - { id: F007, version: v1.0, name: 20cm题材中军象限, category: 选股象限, applies_to: [judge, trader], file: factors/shared/F007_20cm题材中军象限.md, status: 假设, origin: E002-delta-2026-10-22, evidence: [E002 delta 2026-10-21/10-22], experiment: [E003] }
+  - { id: F008, version: v1.0, name: 一字龙开板等于分歧点, category: 时点信号, applies_to: [judge, trader], file: factors/shared/F008_一字龙开板等于分歧点.md, status: 假设, origin: E002-delta-2026-10-24, evidence: [E002 delta 2026-10-24] }
+  - { id: F009, version: v1.0, name: 抱团内部生死排序, category: 观察项, applies_to: [judge], file: factors/review/F009_抱团内部生死排序.md, status: 假设, origin: E002-delta-2026-10-23, evidence: [E002 delta 2026-10-23] }
+  - { id: F010, version: v1.0, name: 高潮次日不做后手买入, category: 时点信号, applies_to: [trader], file: factors/strategy/F010_高潮次日不做后手买入.md, status: 验证中, origin: E002-delta-2026-10-24, evidence: [E002 delta 2026-10-24, E001 review 2026-10-26], experiment: [E003] }
+  - { id: F011, version: v1.0, name: 微盘股指数日常观察, category: 观察项, applies_to: [judge], file: factors/review/F011_微盘股指数日常观察.md, status: 假设, origin: 用户提议 2026-10-27, evidence: [], note: 数据源待接入 }
+  - { id: F012, version: v1.0, name: 载体模板模仿链, category: 观察项, applies_to: [judge], file: factors/review/F012_载体模板模仿链.md, status: 假设, origin: 用户提议 2026-10-27, evidence: [review 2026-10-27 空间链数据核实], note: 先结构化记录再回测 }
+  - { id: F013, version: v1.0, name: 破局者（天花板突破）, category: 时点信号, applies_to: [judge], file: factors/review/F013_破局者.md, status: 假设, origin: 用户提议 2026-10-27, evidence: [review 2026-10-27] }
+  - { id: UW001, version: v1.0, name: user watchlist, category: 用户先验, applies_to: [judge, trader], file: factors/review/UW001_user_watchlist.md, status: 待验证, origin: 用户提议 2026-10-28, evidence: [], state: state/watchlist/user/current.yaml }
+  - { id: F014, version: v1.0, name: 首分setup合格条件, category: 时点信号, applies_to: [trader], file: factors/strategy/F014_首分setup合格条件.md, status: 假设, origin: 老骚 JDFS 1025 答疑会, evidence: [JDFS 1025 首分可买性三连/弹性票实证（单样本段）], note: 正面清单，与 F002/F003/F010 负面清单互为闸门两侧；弹性票优先待回测 }
+  - { id: F015, version: v1.0, name: 出场规则（节奏兑现）, category: 风控条件, applies_to: [trader], file: factors/strategy/F015_出场规则_节奏兑现.md, status: 已入框架, origin: 老骚 JDFS 0809/1025, evidence: [JDFS 0809 不赌抱团, JDFS 1025 卖点纪律], note: 与 F004 分层：F015 节奏驱动，F004 异常兜底 }
+  - { id: F016, version: v1.0, name: 切换日判定标准, category: 时点信号, applies_to: [judge, trader], file: factors/shared/F016_切换日判定标准.md, status: 已入框架, origin: 老骚 JDFS 0614/0927/1007/1018, evidence: [JDFS 0927 结束K形态学, JDFS 1007 分离确认流程, JDFS 1018 切换日质量评估] }

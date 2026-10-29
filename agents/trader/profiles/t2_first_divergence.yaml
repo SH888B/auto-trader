@@ -1,0 +1,26 @@
+id: trader-first-divergence
+version: t2.1
+prompt: agents/trader/prompts/v2.1.md
+factors:
+  - F002@v1.0
+  - F003@v1.0
+  - F004@v1.0
+  - F005@v1.0
+  - F007@v1.0
+  - F008@v1.0
+  - F010@v1.0
+  - F014@v1.0
+  - F015@v1.0
+  - F016@v1.0
+input_view: configs/digest/trader_initial.yaml
+data_requirements:
+  - theme_candidates
+  - daily_bars
+  - board_members
+queries:
+  - get_theme_members
+  - get_daily_bars
+  - get_snapshot_table
+  - get_board_momentum
+output_contract: contracts/order_intents.schema.json
+user_watchlist: disabled

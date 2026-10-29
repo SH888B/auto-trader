@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Broker fills v1",
+  "type": "object",
+  "required": ["as_of", "run_id", "fills"],
+  "properties": {
+    "as_of": {"type": "string"}, "run_id": {"type": "string"},
+    "fills": {"type": "array", "items": {"type": "object", "required": ["fill_id", "order_id", "ts_code", "side", "quantity", "price", "filled_at"], "properties": {
+      "fill_id": {"type": "string"}, "order_id": {"type": "string"}, "ts_code": {"type": "string"},
+      "side": {"enum": ["buy", "sell"]}, "quantity": {"type": "number", "exclusiveMinimum": 0},
+      "price": {"type": "number", "exclusiveMinimum": 0}, "filled_at": {"type": "string"},
+      "fee": {"type": ["number", "null"], "minimum": 0}, "slippage": {"type": ["number", "null"]}
+    }}}
+  }
+}

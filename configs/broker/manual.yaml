@@ -1,0 +1,7 @@
+version: b1.0
+mode: manual
+runbook: agents/broker/runbooks/manual_v1.md
+allow_price_improvement: false
+allow_size_change: false
+require_orders: true
+require_fills: true

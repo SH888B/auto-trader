@@ -1,0 +1,33 @@
+# ===== 私有素材（不进 git）=====
+# 账户与密钥配置（裁决 3：配置项私有化）
+config/
+# 运行状态与实盘产物
+state/
+runs/
+logs/
+# 生成数据（raw/curated/snapshots/数仓，各自由 Scout 重建）
+data/
+# 私有研究素材
+experiments/
+reference/
+framework/
+cases/
+reviews/
+backtests/
+# 过程文件
+archive/
+temp/
+inbox/
+DESIGN-*.md
+TODO.md
+
+# ===== 通用 =====
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db

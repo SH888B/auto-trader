@@ -1,0 +1,26 @@
+version: q1.0
+allowed_queries:
+  - get_daily_bars
+  - get_theme_members
+  - get_snapshot_table
+  - get_board_momentum
+allowed_snapshot_tables:
+  - index_panel
+  - boards
+  - limit_up
+  - limit_down
+  - ceiling
+  - carrier_lifecycle
+  - amount_top
+  - gain_top
+  - loss_top
+  - pit_top
+  - gain_week
+  - cm20_core
+  - prev_lu_feedback
+  - prev_ld_feedback
+  - watchlist_today
+notes:
+  get_theme_members: 当前只返回涨跌停事件候选；完整板块成员数据接入前不得宣称全覆盖
+  get_board_momentum: 输入 Judge 预判的明日首分板块 board_codes，返回 dim_board_member 成分按两日涨幅排序 top_n（默认20，含五日涨幅）；成分取 trade_date<=as_of 最新快照（接口无历史变更，回测前先按回放日跑 fetch_theme_members）
+point_in_time: 所有查询必须携带 as_of，数据过滤不得晚于该日

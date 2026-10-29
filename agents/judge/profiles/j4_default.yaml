@@ -1,0 +1,16 @@
+id: judge-default
+version: j4.0
+prompt: agents/judge/prompts/v4.md
+factors:
+  - F001@v1.0
+  - F006@v1.0
+  - F008@v1.0
+  - F009@v1.0
+  - F011@v1.0
+  - F012@v1.0
+  - F013@v1.0
+input_view: configs/digest/judge_default.yaml
+queries:
+  - get_snapshot_table
+output_contract: contracts/review.schema.json
+user_watchlist: disabled

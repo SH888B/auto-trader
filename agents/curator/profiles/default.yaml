@@ -1,0 +1,6 @@
+version: c1.0
+renderer: scripts/curator/render_digest.py
+query_runner: scripts/curator/query_data.py
+query_templates: configs/queries/templates.yaml
+freeform_llm_summary: false
+point_in_time: true

@@ -1,0 +1,36 @@
+version: jv1.3
+description: Judge 四层复盘默认视图；display_n 只控制展开，不改变标准数据；jv1.1 起渲染套用列名字典；jv1.2 起板块展示 15 行并附阅读指引，涨停结构切换为聚焦表
+sections:
+  - title: 指数与量能
+    table: index_panel
+    display_n: 20
+  - title: 市场广度
+    type: breadth
+    display_n: 100
+  - title: 板块与题材
+    table: boards
+    display_n: 15
+    note: >-
+      阅读指引：板块成分股大量重叠，注意分辨——大板块排名靠前代表该大方向强度很强
+      （例：通信第10名=科技方向力量强）；小板块往往代表具体发酵分支，操作应落在分支上
+      （例：光隔离器第3、DSP芯片第5，则做这两个分支的首分，而非通信本身）。
+      以上仅为结构示例，非当日指向。
+  - title: 涨停结构
+    table: limit_up_focus
+    display_n: 40
+    note: >-
+      涨停过多时的聚焦规则：①封单最大（强度品种）②最高板 ③20cm（连板优先）
+      ④每个题材最高的（暂以行业为代理，真正题材映射待 get_theme_members）。
+      另有首板封单王/成交王/市值王。关注类别列即规则标签。
+  - { title: 跌停结构, table: limit_down, display_n: 30 }
+  - { title: 天花板, table: ceiling, display_n: 20 }
+  - { title: 载体生命周期, table: carrier_lifecycle, display_n: 30 }
+  - { title: 成交额榜, table: amount_top, display_n: 60 }
+  - { title: 涨幅榜, table: gain_top, display_n: 60 }
+  - { title: 跌幅榜, table: loss_top, display_n: 20 }
+  - { title: 当日坑货榜, table: pit_top, display_n: 20 }
+  - { title: 周涨幅榜, table: gain_week, display_n: 60 }
+  - { title: 20cm 中军候选, table: cm20_core, display_n: 20 }
+  - { title: 昨涨停反馈, table: prev_lu_feedback, display_n: 30 }
+  - { title: 昨跌停反馈, table: prev_ld_feedback, display_n: 20 }
+  - { title: Judge 关注列表, table: watchlist_today, display_n: 50 }

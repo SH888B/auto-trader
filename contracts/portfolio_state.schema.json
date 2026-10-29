@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Portfolio state v1.0",
+  "type": "object",
+  "required": ["version", "cash_pct", "positions"],
+  "properties": {
+    "version": {"const": "portfolio1.0"},
+    "updated": {"type": ["string", "null"]},
+    "cash_pct": {"type": "number", "minimum": 0, "maximum": 1},
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ts_code", "pct", "cost_price", "status", "filled_date", "source_order_ref"],
+        "properties": {
+          "ts_code": {"type": "string", "pattern": "^\\d{6}\\.(SH|SZ|BJ)$"},
+          "pct": {"type": "number", "minimum": 0, "maximum": 1},
+          "cost_price": {"type": "number", "minimum": 0},
+          "last_price": {"type": ["number", "null"]},
+          "filled_date": {"type": "string"},
+          "source_order_ref": {"type": "string"},
+          "stop_loss": {"type": ["number", "null"]},
+          "take_profit": {"type": ["number", "null"]},
+          "status": {"enum": ["open", "closed"]},
+          "exit_price": {"type": ["number", "null"]},
+          "exit_date": {"type": ["string", "null"]},
+          "exit_reason": {"type": ["string", "null"]},
+          "realized_pnl_pct": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "open_orders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ts_code", "action", "limit_price", "position_pct", "valid_for", "source_order_ref"],
+        "properties": {
+          "ts_code": {"type": "string"},
+          "action": {"enum": ["buy", "sell"]},
+          "limit_price": {"type": ["number", "null"]},
+          "position_pct": {"type": "number", "minimum": 0, "maximum": 1},
+          "valid_for": {"type": "string"},
+          "source_order_ref": {"type": "string"},
+          "status": {"enum": ["pending", "filled", "unfilled", "expired"]}
+        }
+      }
+    }
+  }
+}

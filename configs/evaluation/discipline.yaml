@@ -1,0 +1,13 @@
+version: ev1.1
+scorer: scripts/evaluation/score_v3.py
+legacy_scorer: scripts/evaluation/scorer.py
+execution: discipline
+fill_rule: open_or_limit_touch
+same_bar_priority: stop_loss
+slippage_bps: 0
+layers: [judge, trader, broker, overall]
+single_trade_promotion: false
+notes:
+  judge: 机械层只校验结构与引用；语义质量独立评价
+  trader: 使用 valid_for 日线回放订单意图，未成交收益贡献为 0
+  broker: 实际成交单独汇总，不从 fills 推断完整账户收益

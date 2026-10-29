@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Broker orders v1",
+  "type": "object",
+  "required": ["as_of", "run_id", "orders"],
+  "properties": {
+    "as_of": {"type": "string"}, "run_id": {"type": "string"},
+    "orders": {"type": "array", "items": {"type": "object", "required": ["order_id", "intent_ref", "ts_code", "action", "status"], "properties": {
+      "order_id": {"type": "string"}, "intent_ref": {"type": "string"}, "ts_code": {"type": "string"},
+      "action": {"enum": ["buy", "sell", "hold", "cancel"]},
+      "status": {"enum": ["submitted", "rejected", "cancelled", "modified", "not_submitted"]},
+      "broker_order_id": {"type": ["string", "null"]}, "note": {"type": ["string", "null"]}
+    }}}
+  }
+}

@@ -1,0 +1,9 @@
+version: tv1.1
+description: Trader 初始市场视图；板块成员和个股日线通过受控查询补充；tv1.1 起渲染套用列名字典
+sections:
+  - { title: 板块与题材, table: boards, display_n: 20 }
+  - { title: 涨停结构, table: limit_up, display_n: 50 }
+  - { title: 成交额榜, table: amount_top, display_n: 20 }
+  - { title: 涨幅榜, table: gain_top, display_n: 30 }
+  - { title: 20cm 中军候选, table: cm20_core, display_n: 20 }
+  - { title: Judge 关注列表, table: watchlist_today, display_n: 50 }

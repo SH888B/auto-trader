@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trader order intents v1",
+  "type": "object",
+  "required": ["as_of", "valid_for", "judge_review_ref", "trader_profile", "account_state_ref", "query_manifest_ref", "actions", "no_trade_reason"],
+  "properties": {
+    "as_of": {"type": "string"}, "valid_for": {"type": "string"},
+    "judge_review_ref": {"$ref": "#/definitions/artifactRef"},
+    "account_state_ref": {"$ref": "#/definitions/artifactRef"},
+    "query_manifest_ref": {"$ref": "#/definitions/artifactRef"},
+    "position_state_ref": {"$ref": "#/definitions/artifactRef", "description": "v1.1 可选：T日收盘持仓状态（apply_position_fills 产物），sell/hold 单校验持仓存在性"},
+    "trader_profile": {"type": "object", "required": ["id", "version"], "properties": {"id": {"type": "string"}, "version": {"type": "string"}}},
+    "actions": {"type": "array", "items": {"$ref": "#/definitions/action"}},
+    "no_trade_reason": {"type": ["string", "null"]}
+  },
+  "definitions": {
+    "artifactRef": {"type": "object", "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "minLength": 64, "maxLength": 64}}},
+    "action": {
+      "type": "object",
+      "required": ["ts_code", "action", "order_type", "limit_price", "stop_loss", "take_profit", "position_pct", "time_in_force", "reason", "strategy_factor_refs"],
+      "properties": {
+        "ts_code": {"type": "string", "pattern": "^\\d{6}\\.(SH|SZ|BJ)$"},
+        "action": {"enum": ["buy", "sell", "hold", "cancel"]},
+        "order_type": {"enum": ["limit", "market", "none"]},
+        "limit_price": {"type": ["number", "null"], "minimum": 0},
+        "stop_loss": {"type": ["number", "null"], "minimum": 0},
+        "take_profit": {"type": ["number", "null"], "minimum": 0},
+        "position_pct": {"type": "number", "minimum": 0, "maximum": 1},
+        "time_in_force": {"type": "string"},
+        "cancel_or_replace": {"type": ["object", "null"]},
+        "reason": {"type": "string", "minLength": 4},
+        "strategy_factor_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

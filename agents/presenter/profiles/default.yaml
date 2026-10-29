@@ -1,0 +1,7 @@
+version: p1.0
+mode: read_only
+sources:
+  - logs/run_events.jsonl
+  - experiments/
+  - runs/live/
+write_back: false

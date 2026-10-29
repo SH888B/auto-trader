@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Judge review v1.2",
+  "description": "v1.1（2026-10-28）：market_regime 结构化（trend_segment/position/tolerance/switch_day）；theme 新增 rhythm_stage 受控状态机（首分严格定义，标注首分必须给 stage_basis）；carrier 新增 carrier_class/capacity/divergence_proxy。stage/role 自由文本字段保留但弃用：v1 历史产物仍可通过校验，score_v3 对历史 review 的校验不受影响。v1.2（2026-10-29）：新增必填 next_day_first_divergence_boards（明日可能首分板块：board_code 885xxx.TI + 名称 + theme_id 关联 + 预判依据；允许空数组不得省略），供 Trader 调 get_board_momentum 取成分两日涨幅榜。",
+  "type": "object",
+  "required": ["as_of", "market_regime", "risks", "themes", "carriers", "data_gaps", "watchlist_updates"],
+  "properties": {
+    "as_of": {"type": "string", "format": "date"},
+    "review_version": {"type": "string", "pattern": "^v1\\.[012]$"},
+    "market_regime": {
+      "type": "object",
+      "required": ["evidence", "confidence"],
+      "properties": {
+        "label": {"type": "string", "description": "遗留自由文本，v1.1 起弃用，勿与新结构化字段同写"},
+        "trend_segment": {"enum": ["上升增量", "震荡", "下降缩量"]},
+        "position": {"enum": ["顶部", "左脚", "底部横盘", "右脚", "上升中继"]},
+        "index_space": {"type": "string", "description": "上行压力位/下行支撑位及依据"},
+        "tolerance_level": {"enum": ["高", "中", "低"]},
+        "tolerance_evidence": {"type": "array", "items": {"type": "string"}},
+        "switch_day": {
+          "type": "object",
+          "required": ["is_switch_day"],
+          "properties": {
+            "is_switch_day": {"type": "boolean"},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+            "candidates": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "themes": {"type": "array", "items": {"$ref": "#/definitions/theme"}},
+    "carriers": {"type": "array", "items": {"$ref": "#/definitions/carrier"}},
+    "data_gaps": {"type": "array", "items": {"type": "string"}},
+    "watchlist_updates": {"type": "array", "items": {"$ref": "#/definitions/watchlistUpdate"}},
+    "next_day_first_divergence_boards": {
+      "type": "array",
+      "description": "明日可能首分板块（Judge 预判，市场结构判断非交易指令）；空数组=无预判，不得省略本字段",
+      "items": {"$ref": "#/definitions/fdBoard"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"review_version": {"enum": ["v1.1", "v1.2"]}}, "required": ["review_version"]},
+      "then": {
+        "properties": {
+          "market_regime": {"required": ["trend_segment", "position", "tolerance_level", "switch_day"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"review_version": {"const": "v1.2"}}, "required": ["review_version"]},
+      "then": {"required": ["next_day_first_divergence_boards"]}
+    }
+  ],
+  "definitions": {
+    "theme": {
+      "type": "object",
+      "required": ["theme_id", "name", "evidence", "invalid_if", "confidence"],
+      "properties": {
+        "theme_id": {"type": "string"}, "name": {"type": "string"},
+        "stage": {"type": "string", "description": "遗留自由文本，v1.1 起弃用，改用 rhythm_stage"},
+        "rhythm_stage": {"enum": ["启动", "延续", "首分", "回流", "二次分歧", "退潮", "淡出"]},
+        "stage_basis": {"type": "string", "description": "stage 定位依据；rhythm_stage=首分时必填，须写明三天组合K中两根大阳线后的第一次分歧的组合依据"},
+        "board_position": {"enum": ["主线", "补涨", "反向", "伴随", "独立"]},
+        "strength_evidence": {"type": "string", "description": "首分可买性三连之①：题材强度证据"},
+        "is_switch_window": {"type": "boolean", "description": "首分可买性三连之②：是否切换节点启动/衔接"},
+        "competitors": {"type": "array", "items": {"type": "string"}, "description": "首分可买性三连之③：竞争对手 theme_id 列表，空=无竞争"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "invalid_if": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "if": {"required": ["rhythm_stage"], "properties": {"rhythm_stage": {"const": "首分"}}},
+      "then": {"required": ["stage_basis"]}
+    },
+    "carrier": {
+      "type": "object",
+      "required": ["ts_code", "theme_id", "evidence", "confidence"],
+      "properties": {
+        "ts_code": {"type": "string", "pattern": "^\\d{6}\\.(SH|SZ|BJ)$"},
+        "theme_id": {"type": "string"},
+        "role": {"type": "string", "description": "遗留自由文本，v1.1 起弃用，改用 carrier_class"},
+        "carrier_class": {"enum": ["核心", "强度票", "弹性", "中军", "补涨", "观察"]},
+        "capacity": {"enum": ["大", "中", "小"], "description": "成交额量级；小容量核心不可上大仓位"},
+        "divergence_proxy": {"type": "boolean", "description": "是否适合作板块分歧判断锚：弹性票=true，抱团核心=false（核心可能抗跌+补跌）"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "watchlistUpdate": {
+      "type": "object",
+      "required": ["ts_code", "operation", "reason"],
+      "properties": {
+        "ts_code": {"type": "string"}, "operation": {"enum": ["add", "remove", "upgrade", "downgrade", "confirm"]},
+        "role": {"type": ["string", "null"]}, "level": {"type": ["string", "null"]}, "theme_id": {"type": ["string", "null"]}, "reason": {"type": "string"}
+      }
+    },
+    "fdBoard": {
+      "type": "object",
+      "required": ["board_code", "board_name", "theme_id", "basis"],
+      "properties": {
+        "board_code": {"type": "string", "pattern": "^\\d{6}\\.TI$", "description": "同花顺板块代码（885xxx.TI），直接作为 Curator get_board_momentum 的 board_codes 入参"},
+        "board_name": {"type": "string"},
+        "theme_id": {"type": "string", "description": "关联 themes[].theme_id，须为本次 review 已分析题材"},
+        "basis": {"type": "string", "description": "预判依据：当前 rhythm_stage、两根大阳线后的位置、量能与分歧迹象"}
+      }
+    }
+  }
+}
