@@ -23,12 +23,14 @@ class Daily:
                  run_root: str = "runs/live",
                  judge_profile: str | None = None,
                  trader_profile: str | None = None,
+                 state_root: str = "state",
                  watchlist_target: str | None = None,
                  portfolio_path: str | None = None) -> None:
         self.ws = workspace or Workspace()
         self.logger = logger or RunLogger()
         self.run_root = run_root
-        judge_kw = {"run_root": run_root}
+        self.state_root = state_root
+        judge_kw = {"run_root": run_root, "state_root": state_root}
         trader_kw = {"run_root": run_root}
         if judge_profile:
             judge_kw["profile_path"] = judge_profile
@@ -82,7 +84,8 @@ class Daily:
         else:
             self.curator.render_digest(
                 day, module="judge", run_id=f"live-{day}-judge",
-                output=f"{self.run_root}/{date_dash}/judge/digest.md")
+                output=f"{self.run_root}/{date_dash}/judge/digest.md",
+                state_root=self.state_root)
 
         self.judge.prepare(date_dash)
 
@@ -101,7 +104,8 @@ class Daily:
             self.curator.render_digest(
                 day, view=TRADER_VIEW, module="trader",
                 run_id=f"live-{day}-trader",
-                output=f"{self.run_root}/{date_dash}/trader/digest.md")
+                output=f"{self.run_root}/{date_dash}/trader/digest.md",
+                state_root=self.state_root)
 
         self.trader.prepare(date_dash)
 

@@ -16,6 +16,7 @@ auto-trader scout run --date YYYYMMDD
 
 3. 检查 `data/snapshots/YYYY-MM-DD/snapshot.yaml` 的数据覆盖、版本和缺口。
 4. Scout 不生成 Agent Digest，也不自动触发 Judge/Trader。
+5. Scout 不再产出 `watchlist_today`：watchlist 是 **state**（按日冻结），由 Curator 渲染 Digest 时按 `as_of` 读取。
 
 需要单步执行或排障时用：
 
@@ -57,7 +58,7 @@ auto-trader curator digest --date YYYYMMDD --module judge \
 ## 三、Judge：只复盘
 
 1. 使用指定 Judge Profile；历史回放先冻结实验 Bundle。
-2. 只读 manifest 中的 Digest、因子、历史 review、Judge watchlist，以及显式启用的 user watchlist。
+2. 只读 manifest 中的 Digest、因子、历史 review，以及**严格早于 T** 的 judge/user watchlist 快照（`state/watchlist/*/history/<T-1>.yaml`）；不读 `current` 回退。
 3. 输出 `review.md` 和 `review.json`，不含买卖、三价、仓位或改单。
 4. 校验：
 
@@ -71,6 +72,12 @@ uv run python scripts/judge/validate_review.py \
 第二条做语义校验（v1.1 结构化字段、首分 stage_basis、theme_id 引用完整性），与 schema 校验互补，不可互相替代。
 
 5. 有 `watchlist_updates` 时，由 Curator 应用并冻结快照；user watchlist 只能由用户修改。
+   当日无更新也要冻结一份（否则次日 Judge 读不到 T-1）：
+
+```bash
+auto-trader state freeze --date YYYYMMDD --judge
+auto-trader state freeze --date YYYYMMDD --user      # 用户维护后冻结
+```
 
 ```bash
 auto-trader curator watchlist apply \

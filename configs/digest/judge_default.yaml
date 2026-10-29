@@ -33,4 +33,4 @@ sections:
   - { title: 20cm 中军候选, table: cm20_core, display_n: 20 }
   - { title: 昨涨停反馈, table: prev_lu_feedback, display_n: 30 }
   - { title: 昨跌停反馈, table: prev_ld_feedback, display_n: 20 }
-  - { title: Judge 关注列表, table: watchlist_today, display_n: 50 }
+  - { title: Judge 关注列表, type: watchlist, source: judge, display_n: 50 }

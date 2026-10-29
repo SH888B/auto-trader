@@ -34,6 +34,9 @@ columns:
   cons_count: { zh: 成分股数, fmt: int0 }
   days: { zh: 上榜天数, fmt: int0, note: tushare limit_cpt_list 官方字段，板块登上涨停概念榜的持续天数 }
   track: { zh: 赛道 }
+  role: { zh: 角色 }
+  reason: { zh: 理由 }
+  theme_id: { zh: 题材 }
   window_max: { zh: 窗口纪录(板), fmt: int0 }
   record_holder: { zh: 纪录保持者 }
   record_date: { zh: 纪录日期 }

@@ -1,8 +1,9 @@
 # selectors.yaml —— Scout 每日筛选配置（与代码分离，改这里不用改脚本）
 # 版本纪律：任何变更 bump version 并在末尾记录原因（见 ARCHITECTURE.md 第四节）
-version: s0.8
-updated: 2026-10-28
+version: s0.9
+updated: 2026-10-29
 change_log:
+  - { version: s0.9, date: 2026-10-29, reason: "watchlist 移出 Scout：删除 groups.watchlist，关注列表改由 Curator 按 as_of 从 state 渲染（PIT 修复）" }
   - { version: s0.8, date: 2026-10-28, reason: "用户拍板：gain_week 源数据 n 30→100（视图展示 60 交给 View Recipe）" }
   - { version: s0.7, date: 2026-10-28, reason: "用户人工审核 digest 拍板：boards_selection_n 10→20（视图展示 15 交给 View Recipe）；新增 limit_up_focus 涨停聚焦表（封单最大/最高板/20cm连板/行业最高板=题材代理/首板三王/20cm）；pit_top 口径已由高低振幅改为收盘距高点回落" }
   - { version: s0.5, date: 2026-10-28, reason: "lifecycle lc0.1→lc0.2：单波定义改破5日线（用户拍板 2026-10-28，'一波上涨未破五日线=同一波'）；级联重排，退潮·破5日线居首；20261027 回放验收 7/7 命中" }
@@ -54,9 +55,6 @@ lifecycle:
   soft_open_amt_ratio: 2.0    #   ……且量环比 >200%（名义未开板、实质板上卖压被硬吃）
 
 groups:
-  watchlist:
-    source: state/watchlist/judge/current.yaml
-    note: 30-50只打标关注列表，Judge每日更新
   amount_top:
     rank: amount
     n: 100

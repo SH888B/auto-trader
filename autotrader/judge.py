@@ -16,6 +16,7 @@ import yaml
 from .core import (
     WORKSPACE_ROOT,
     RunLogger,
+    StateStore,
     Workspace,
     WorkspaceError,
     load_yaml,
@@ -25,7 +26,7 @@ from .curator import Curator
 from .pipeline.validate import require_ok, validate_review
 
 DEFAULT_PROFILE = "agents/judge/profiles/j5_default.yaml"
-DEFAULT_WATCHLIST = "state/watchlist/judge/current.yaml"
+DEFAULT_STATE_ROOT = "state"
 DEFAULT_RUN_ROOT = "runs/live"
 
 
@@ -49,12 +50,37 @@ class Judge:
                  logger: RunLogger | None = None,
                  profile_path: str = DEFAULT_PROFILE,
                  run_root: str = DEFAULT_RUN_ROOT,
-                 watchlist_target: str = DEFAULT_WATCHLIST) -> None:
+                 state_root: str = DEFAULT_STATE_ROOT,
+                 watchlist_target: str | None = None,
+                 user_watchlist_target: str | None = None) -> None:
         self.ws = workspace or Workspace()
         self.logger = logger or RunLogger()
         self.profile_path = profile_path
         self.run_root = run_root
-        self.watchlist_target = watchlist_target
+        self.state_root = state_root
+        self.watchlist_target = watchlist_target or \
+            f"{state_root}/watchlist/judge/current.yaml"
+        self.user_watchlist_target = user_watchlist_target or \
+            f"{state_root}/watchlist/user/current.yaml"
+
+    @property
+    def watchlist_history(self) -> str:
+        return f"{self.state_root}/watchlist/judge/history"
+
+    @property
+    def user_watchlist_history(self) -> str:
+        return f"{self.state_root}/watchlist/user/history"
+
+    def _state_input(self, target: str, history: str, date_dash: str,
+                     label: str) -> str:
+        """取严格早于 date_dash 的冻结快照；缺失即报错（绝不回退 current）。"""
+        path = StateStore(self.ws).as_of_path(
+            target, date_dash, history, strict="before")
+        if path is None:
+            raise WorkspaceError(
+                f"缺 {date_dash} 之前的 {label} 快照（{history}）；"
+                "watchlist 必须每日冻结，不能读 current")
+        return path.resolve().relative_to(self.ws.root.resolve()).as_posix()
 
     # ------------------------------------------------------------------ #
     # prepare：写 handoff/judge_task.yaml + judge_task.md
@@ -93,9 +119,15 @@ class Judge:
             inputs.append(_ref(self.ws, entry["file"]))
             factor_files.append({"id": fid, "name": entry.get("name", ""),
                                  "file": entry["file"]})
-        inputs.append(_ref(self.ws, self.watchlist_target))
+        watchlist_input = self._state_input(
+            self.watchlist_target, self.watchlist_history, date_dash, "judge watchlist")
+        inputs.append(_ref(self.ws, watchlist_input))
+        user_watchlist_input = None
         if profile.get("user_watchlist") == "enabled":
-            inputs.append(_ref(self.ws, "state/watchlist/user/current.yaml"))
+            user_watchlist_input = self._state_input(
+                self.user_watchlist_target, self.user_watchlist_history,
+                date_dash, "user watchlist")
+            inputs.append(_ref(self.ws, user_watchlist_input))
         prev_review = self._previous_review(date_dash)
         if prev_review:
             inputs.append(_ref(self.ws, prev_review))
@@ -115,6 +147,8 @@ class Judge:
             "input_manifest": manifest_ref,
             "factors": factor_files,
             "previous_review": prev_review or None,
+            "watchlist_input": watchlist_input,
+            "user_watchlist_input": user_watchlist_input,
             "allowed_queries": profile.get("queries", []),
             "user_watchlist": profile.get("user_watchlist", "disabled"),
             "outputs": {

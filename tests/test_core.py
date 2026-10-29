@@ -80,6 +80,44 @@ def test_state_store_load_as_of_falls_back_to_history(sandbox: Path) -> None:
     assert store.load_as_of(current, "2025-12-31") == {}
 
 
+def test_state_store_strict_before_excludes_same_day(sandbox: Path) -> None:
+    """Judge 输入必须严格早于 T：T 日自己的状态是 Judge 收盘后才产出的。"""
+    store = StateStore()
+    current = sandbox / "wl_before" / "current.yaml"
+    store.save(current, {"level": 1}, snapshot_date="2026-10-27")
+    assert store.as_of_path(current, "2026-10-28", strict="before").name == \
+        "2026-10-27.yaml"
+    assert store.as_of_path(current, "2026-10-27", strict="before") is None
+    assert store.as_of_path(current, "2026-10-27", strict="exact").name == \
+        "2026-10-27.yaml"
+
+
+def test_state_store_variant_name_sorts_before_canonical(sandbox: Path) -> None:
+    """<date>-w1.0.yaml 变体不应盖过规范 <date>.yaml。"""
+    store = StateStore()
+    current = sandbox / "wl_variant" / "current.yaml"
+    history = current.parent / "history"
+    history.mkdir(parents=True)
+    (history / "2026-10-27.yaml").write_text("level: canonical\n", encoding="utf-8")
+    (history / "2026-10-27-w1.0.yaml").write_text("level: variant\n", encoding="utf-8")
+    assert store.as_of_path(current, "2026-10-28", strict="before").name == \
+        "2026-10-27.yaml"
+
+
+def test_state_store_freeze_copies_current_and_refuses_conflict(sandbox: Path) -> None:
+    store = StateStore()
+    current = sandbox / "wl_freeze" / "current.yaml"
+    current.parent.mkdir(parents=True)
+    current.write_text("stocks: []\n", encoding="utf-8")
+    snap = store.freeze(current, "2026-10-28")
+    assert snap.read_text(encoding="utf-8") == "stocks: []\n"
+    # 幂等
+    assert store.freeze(current, "2026-10-28") == snap
+    current.write_text("stocks: [{ts_code: 000001.SZ}]\n", encoding="utf-8")
+    with pytest.raises(WorkspaceError, match="拒绝覆盖"):
+        store.freeze(current, "2026-10-28")
+
+
 def test_validate_against_schema_errors_sorted() -> None:
     schema = {"type": "object", "required": ["a", "b"]}
     errors = validate_against_schema({"b": 1}, schema)

@@ -19,7 +19,6 @@ allowed_snapshot_tables:
   - cm20_core
   - prev_lu_feedback
   - prev_ld_feedback
-  - watchlist_today
 notes:
   get_theme_members: 当前只返回涨跌停事件候选；完整板块成员数据接入前不得宣称全覆盖
   get_board_momentum: 输入 Judge 预判的明日首分板块 board_codes，返回 dim_board_member 成分按两日涨幅排序 top_n（默认20，含五日涨幅）；成分取 trade_date<=as_of 最新快照（接口无历史变更，回测前先按回放日跑 fetch_theme_members）

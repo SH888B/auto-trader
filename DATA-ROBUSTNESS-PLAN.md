@@ -318,27 +318,27 @@ auto-trader scout verify --date 20261028                    # 账本 vs raw vs �
 
 `meta_coverage` 由 `scout verify` 维护，`select_stocks` 产出的每张表都要登记行数与源 hash。
 
-### 3.8 Watchlist：从数据层移出
+### 3.8 Watchlist：从数据层移出（已实现，PR-2）
 
+语义只有四条：
+
+```text
+judge 读：history/<T-1>.yaml     # 严格早于 T（T 的列表是 Judge 收盘后才产出的）
+user  读：history/<T-1>.yaml     # 同上（"只能查到当天之前"）
+写：     watchlist_updates -> history/<T>.yaml + current.yaml
+实验：  state_root = experiments/E00x/state（judge/user/portfolio 全在下面）
+缺失：  报错，绝不回退 current
 ```
-Scout（只产客观数据，不再读任何 state）
-   ↓
-Curator.render_digest
-   ├─ 读 data/snapshots/<date>/derived/*.csv
-   └─ 读 state/watchlist/{judge,user}/history/<date>.yaml
-        → join 当日 bars → 渲染原"关注列表"段
-```
 
-具体动作：
+实现落在三处（不是三套逻辑，是同一规则的三次接线）：
 
-1. 删 `scout.py:1250` 段与 `selectors.yaml:58` 的 `groups.watchlist`；`watchlist_today` 不再进 `derived/`；
-2. `Curator` 新增 `render_watchlist(state, date)`，读**当日 history**，读不到直接报错；
-3. 新增 `auto-trader state freeze --date D`：把 `current.yaml` 冻结为 `history/D.yaml`；已存在且内容不同 → 拒绝（`StateStore.save` 已有此语义，`core.py:256`）；
-4. Judge 的 `watchlist apply` 落盘时自动 freeze；user watchlist 由用户当日改 `current.yaml` 后跑 `state freeze`（或 `daily prepare` 开头自动 freeze 并记 warning）；
-5. `StateStore` 增加 `strict=True` 模式：要求**恰好**当日快照，缺则报错（修 C-07）；
-6. `configs/queries/templates.yaml` 的 `allowed_snapshot_tables` 去掉 `watchlist_today`。
+1. **Scout 不再产 `watchlist_today`**：删 `scout.py` 的关注列表段与 `selectors.yaml` 的 `groups.watchlist`；`derived/` 里不再有这张表。
+2. **Curator 渲染**：`render_digest` 增加 `state_root`，`type: watchlist` 的 section 读 `history/<T-1>` 并 join 当日 `fact_daily_bar`；读不到直接报错。
+3. **Judge 输入**：`_state_input` 用 `StateStore.as_of_path(..., strict="before")`，任务包记录 `watchlist_input`；user watchlist 同规则且路径随 `state_root` 走。
 
-这样"Judge 每日维护、用户每日维护、Judge 参考 user"的语义完全保留，但 PIT 变成结构性保证。
+配套：`StateStore.as_of_path` 支持 `not_after / before / exact`；`state freeze --date D` 把 current 原样冻结（已存在且不同则拒绝）。`apply_watchlist_updates` 仍自动写 `history/<T>`。
+
+这样"Judge 每日维护、用户每日维护、Judge 参考 user"的语义完全保留，PIT 变成结构性保证；实验之间也互不污染。
 
 ### 3.9 历史数据包（pack）
 
@@ -455,15 +455,15 @@ SELECT * FROM read_json_auto('data/meta/fetch_ledger.jsonl');
 
 | PR | 内容 | 文件 | 规模 | 验收 |
 |---|---|---|---|---|
-| **PR-1** | 账本 + 原子 raw + `sources.yaml`（先覆盖 block 级 5 个接口）+ readiness + 硬门 | 新增 `sources.py` / `ledger.py` / `fetch.py`；改 `scout.py` / `daily.py` / `cli.py` | ~700 行 | 10-28 重跑产出一致（除 hash）；8 个故障注入用例绿；19:00 跑不再误报 kpl 缺口 |
-| **PR-2** | 分窗调度 + 可用时间实测回填 + 交叉校验 + 预算/熔断持久化 | `fetch.py` / `sources.yaml` / `meta` | ~300 行 | 计划任务连续 3 天；退出码语义正确；账本可回答"首 OK 时刻" |
-| **PR-3** | schema v2：`dim_trade_date` / `meta_coverage` / 原子写 / SCD2 / 去审计列 / 重建仓库 | `schema_v2.sql` / `scout.py` / `curator.py` | ~500 行 | 同一天两次重建，derived hash 完全一致；窗口查询不再受指数日污染 |
-| **PR-4** | Watchlist 移出 + `state freeze` + `strict` 读取 + Digest 改造 | `scout.py` / `curator.py` / `core.py` / `cli.py` | ~250 行 | 回放 10-19 不再出现 10-27 的关注列表；缺当日快照时明确报错 |
-| **PR-5** | 历史 pack（120 天）+ 删旧 `scripts/` + CI + 文档 | `pack.py` / `.github/` / `ARCHITECTURE-V3.md` / `workflows/DAILY.md` | ~200 行 + 跑数 | pack hash 固定；`pytest` 在 CI 绿；relay 断开仍能跑 Curator/Judge |
+| **PR-1** | ✅ 账本 + 原子 raw + `sources.yaml` + readiness + 硬门 | 新增 `sources.py` / `ledger.py` / `fetch.py`；改 `scout.py` / `daily.py` / `cli.py` | ~700 行 | 10-28 重跑产出一致（除 hash）；故障注入用例绿；19:00 跑不再误报 kpl 缺口 |
+| **PR-2** | ✅ Watchlist 移出 + `state freeze` + `strict` 读取 + Digest 改造 | `scout.py` / `curator.py` / `core.py` / `cli.py` / `experiment.py` | ~200 行 | Digest 只用 T-1 快照；缺 T-1 明确报错；实验隔离 user watchlist |
+| **PR-3** | 分窗调度 + 可用时间实测回填 + 交叉校验 + 预算/熔断持久化 | `fetch.py` / `sources.yaml` / `meta` | ~300 行 | 计划任务连续 3 天；退出码语义正确；账本可回答"首 OK 时刻" |
+| **PR-4** | schema v2：`dim_trade_date` / `meta_coverage` / 原子写 / SCD2 / 去审计列 / 重建仓库 | `schema_v2.sql` / `scout.py` / `curator.py` | ~500 行 | 同一天两次重建，derived hash 完全一致；窗口查询不再受指数日污染 |
+| **PR-5** | 历史 pack（10-01 起，可增量扩）+ 删旧 `scripts/` + CI + 文档 | `pack.py` / `.github/` / `ARCHITECTURE-V3.md` / `workflows/DAILY.md` | ~200 行 + 跑数 | pack hash 固定；`pytest` 在 CI 绿；relay 断开仍能跑 Curator/Judge |
 
-依赖关系：PR-1 → PR-2 → PR-3 →（PR-4 可与 PR-3 并行）→ PR-5。
+依赖关系：PR-1 → PR-2 → PR-3 → PR-4 → PR-5。
 
-**为什么把 watchlist 排到 PR-4**：它是正确性问题，但依赖 `state freeze` 与 Curator 改造；而 PR-1 的账本不依赖它。如果你希望先堵 PIT 泄漏，可以把 PR-4 提到 PR-1 之后——只需两天，我建议提。
+watchlist 已按裁决提前到 PR-2 并完成：它不依赖账本，且不修就会污染后续每一轮回放。原计划的"PR-4"因此后移为 schema v2。
 
 ---
 
@@ -479,21 +479,18 @@ SELECT * FROM read_json_auto('data/meta/fetch_ledger.jsonl');
 
 ---
 
-## 9. 需要你拍板（6 项）
+## 9. 决策记录（已拍板）
 
-| # | 决策 | 我的建议 |
+| # | 决策 | 结论 |
 |---|---|---|
-| 1 | **历史起点**：`2026-01-02`（约 200 交易日）/ `2026-04-01`（约 140 天）/ 只补 120 天 | 从 `2026-01-02` 起，覆盖足够多情绪周期；夜间跑，断点续 |
+| 1 | **历史起点** | **2026-10-01 起**（国庆休市，实际约 15 个交易日）；pack 做成可增量扩展 |
 | 2 | **schema v2 直接重建**，不写迁移 | 同意（旧实验不作数；迁移成本 > 重建） |
-| 3 | **`degraded` 是否允许研究** | 允许，但 `score/verdict` 拒绝；实验可在 bundle 里声明 `tolerate_degraded` |
-| 4 | **是否给 block 级接口配官方 token 兜底** | 先不配。跑两周账本后看失败率，若 `daily/stk_limit` 月失败 > 3 天再上 |
-| 5 | **pack 与 snapshots 的关系** | snapshots 保留为当日实盘产物；pack 只用于实验/回放 |
+| 3 | **`degraded` 是否允许研究** | 允许，但 `score/verdict` 拒绝；实验可声明 `tolerate_degraded` |
+| 4 | **官方 token 兜底** | 先不做；跑两周账本后再评估 |
+| 5 | **pack 与 snapshots 的关系** | 暂缓（不影响 PR-1/2） |
 | 6 | **`scripts/` 删除时机** | PR-5 一起删；`scripts/evaluation`、`scripts/presenter` 保留到重设计完成 |
-
-另外两个小确认：
-
-7. 文档位置：`DATA-ROBUSTNESS-PLAN.md`（不入 `.gitignore`）是否合适？还是改名 `docs/…`？
-8. PR-4（watchlist）是否提前到 PR-1 之后？
+| 7 | 文档位置 | 保留 `DATA-ROBUSTNESS-PLAN.md` |
+| 8 | watchlist 是否提前 | **已提前为 PR-2 并完成**（详见 §3.8） |
 
 ---
 

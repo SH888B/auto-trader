@@ -207,6 +207,26 @@ def _validate_intents(args: argparse.Namespace) -> int:
     return 0
 
 
+def _state_freeze(args: argparse.Namespace) -> int:
+    from .core import StateStore
+
+    store = StateStore()
+    date_dash = args.date if "-" in args.date else \
+        f"{args.date[:4]}-{args.date[4:6]}-{args.date[6:]}"
+    picked = [flag for flag, enabled in (
+        ("judge", args.judge), ("user", args.user), ("portfolio", args.portfolio))
+        if enabled]
+    if not picked:
+        picked = ["judge", "user", "portfolio"]
+    names = {"judge": "watchlist/judge", "user": "watchlist/user",
+             "portfolio": "portfolio"}
+    for flag in picked:
+        target = f"{args.root}/{names[flag]}/current.yaml"
+        path = store.freeze(target, date_dash)
+        print(f"[freeze] {target} -> {path}")
+    return 0
+
+
 def _experiment_setup(args: argparse.Namespace) -> None:
     from .experiment import Experiment
 
@@ -399,6 +419,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--with-data", action="store_true",
                    help="缺快照时自动跑 Scout 全日链（历史外部数据可能缺失）")
     p.set_defaults(handler=_experiment_run)
+
+    # ------------------------------ state ------------------------------ #
+    p_state = sub.add_parser("state", help="状态快照：watchlist/portfolio 按日冻结")
+    ssub = p_state.add_subparsers(dest="command", required=True)
+    p = ssub.add_parser("freeze", help="把 current 冻结为 history/<date>.yaml")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.add_argument("--root", default="state", help="状态根目录（实验传 experiments/E00x/state）")
+    p.add_argument("--judge", action="store_true", help="只冻结 judge watchlist")
+    p.add_argument("--user", action="store_true", help="只冻结 user watchlist")
+    p.add_argument("--portfolio", action="store_true", help="只冻结 portfolio")
+    p.set_defaults(handler=_state_freeze)
 
     # ------------------------------ 占位 ------------------------------ #
     for name, help_text in [

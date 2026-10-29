@@ -221,20 +221,56 @@ class StateStore:
         return load_yaml(self._resolve(target))
 
     def as_of_path(self, target: str | Path, as_of: str,
-                   history_dir: str | Path | None = None) -> Path | None:
-        """返回 as_of 收盘时的状态文件路径（history 回退查询）；无则 None。"""
+                   history_dir: str | Path | None = None,
+                   *, strict: str = "not_after") -> Path | None:
+        """返回 as_of 时点的状态文件路径（history 回退查询）；无则 None。
+
+        Args:
+            strict: "not_after"（默认，<= as_of 的最新一份）/
+                "before"（严格 < as_of，用于 Judge 输入：T 日只能看 T-1）/
+                "exact"（必须正好是 as_of 当天）。
+        """
         resolved = self._resolve(target)
         history = self._resolve(history_dir) if history_dir else resolved.parent / "history"
         if not history.is_dir():
             return None
-        candidates = sorted(p for p in history.glob("*.yaml") if p.stem <= as_of)
+        if strict == "exact":
+            candidate = history / f"{as_of}.yaml"
+            return candidate if candidate.is_file() else None
+        if strict not in ("before", "not_after"):
+            raise WorkspaceError(f"未知 strict 模式：{strict}")
+        # 用文件名比较（而非 stem）：变体名 <date>-w1.0.yaml 会排在规范名 <date>.yaml 之前
+        candidates = sorted(p for p in history.glob("*.yaml")
+                            if (p.name < f"{as_of}.yaml" if strict == "before"
+                                else p.name <= f"{as_of}.yaml"))
         return candidates[-1] if candidates else None
 
     def load_as_of(self, target: str | Path, as_of: str,
-                   history_dir: str | Path | None = None) -> dict[str, Any]:
+                   history_dir: str | Path | None = None,
+                   *, strict: str = "not_after") -> dict[str, Any]:
         """读取 as_of 时点的冻结状态；无快照返回空 dict。"""
-        snapshot = self.as_of_path(target, as_of, history_dir)
+        snapshot = self.as_of_path(target, as_of, history_dir, strict=strict)
         return load_yaml(snapshot) if snapshot else {}
+
+    def freeze(self, target: str | Path, snapshot_date: str,
+               history_dir: str | Path | None = None) -> Path:
+        """把 current 原样冻结为 ``history/<date>.yaml``（不重写 current）。
+
+        Raises:
+            WorkspaceError: current 缺失，或历史快照已存在且内容不同。
+        """
+        resolved = self._resolve(target)
+        if not resolved.is_file():
+            raise WorkspaceError(f"状态文件不存在，无法冻结：{resolved}")
+        rendered = resolved.read_text(encoding="utf-8")
+        history = self._resolve(history_dir) if history_dir else resolved.parent / "history"
+        snapshot = history / f"{snapshot_date}.yaml"
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
+        if snapshot.exists() and snapshot.read_text(encoding="utf-8") != rendered:
+            raise WorkspaceError(f"历史快照已存在且内容不同，拒绝覆盖：{snapshot}")
+        if not snapshot.exists():
+            snapshot.write_text(rendered, encoding="utf-8")
+        return snapshot
 
     def save(self, target: str | Path, state: dict[str, Any],
              snapshot_date: str | None = None,

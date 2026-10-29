@@ -1258,20 +1258,20 @@ class Scout:
         panel = ROOT / "data" / "curated" / date_dash / "index_panel.csv"
         if panel.exists():
             save(pd.read_csv(panel), "index_panel", "第一层指数量能")
-        # 关注列表（无则建空模板，Judge 每日维护；路径只来自 Data Recipe）
-        wl_path = ROOT / selectors["groups"]["watchlist"]["source"]
-        if not wl_path.exists():
-            wl_path.parent.mkdir(parents=True, exist_ok=True)
-            wl_path.write_text(
-                "# 每日关注列表（30-50只）：由 Judge 更新，Scout 只读\n"
-                "# 字段：ts_code, name, theme, role(空间板/中军/20cm弹性/前排/后排), "
-                "reason, added_date, status(关注/移出留痕)\n"
-                "version: w0.0\nstocks: []\n",
-                encoding="utf-8")
-        wl = load_yaml(wl_path)
-        wl_codes = [s["ts_code"] for s in wl.get("stocks", []) if s.get("status", "关注") == "关注"]
-        if wl_codes:
-            save(pool[pool["ts_code"].isin(wl_codes)], "watchlist_today", "关注列表今日走势")
+        # 关注列表不在这里落 derived 表：watchlist 是 state，由 Curator 渲染 digest。
+        # 但"载体生命周期"的候选集需要关注票，这里按 T-1 冻结快照只读取代码，
+        # 不读 current（PIT），缺失则视为空集。
+        def _watchlist_codes(day: str) -> set[str]:
+            from .core import StateStore
+
+            path = StateStore(self.ws).as_of_path(
+                "state/watchlist/judge/current.yaml", day,
+                "state/watchlist/judge/history", strict="before")
+            if path is None:
+                return set()
+            state = load_yaml(path)
+            return {str(s["ts_code"]) for s in (state.get("stocks") or [])
+                    if str(s.get("status", "关注")) == "关注" and s.get("ts_code")}
         # 板块榜（含规模阈值过滤）
         boards = con.execute("SELECT * FROM fact_board_rank WHERE trade_date = ?",
                              [date_dash]).fetchdf()
@@ -1353,7 +1353,7 @@ class Scout:
                 f"FROM fact_limit_detail WHERE limit_type='U' AND trade_date IN ({_ph(lb)})",
                 lb).fetchdf()
             today_det = det[det["trade_date"] == date_dash] if not det.empty else pd.DataFrame()
-            cand: set[str] = set(wl_codes)
+            cand: set[str] = _watchlist_codes(date_dash)
             if not today_det.empty:
                 cand |= set(today_det[today_det["limit_times"] >= 2]["ts_code"])
             recent5 = det[det["trade_date"].isin(lb[:5])] if not det.empty else pd.DataFrame()

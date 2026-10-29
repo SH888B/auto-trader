@@ -22,7 +22,14 @@ import pandas as pd
 import yaml
 from jsonschema import Draft7Validator
 
-from .core import WORKSPACE_ROOT, Workspace, WorkspaceError, load_yaml, sha256_file
+from .core import (
+    WORKSPACE_ROOT,
+    StateStore,
+    Workspace,
+    WorkspaceError,
+    load_yaml,
+    sha256_file,
+)
 
 ROOT = WORKSPACE_ROOT
 DB_PATH = ROOT / "data" / "warehouse.duckdb"
@@ -77,6 +84,44 @@ def markdown_table(df: pd.DataFrame, columns: list[str], limit: int,
         cells = " | ".join(fmt_cell(row[c], dictionary.get(c)) for c in cols)
         lines.append(f"| {cells} |")
     return "\n".join(lines)
+
+
+WATCHLIST_COLUMNS = ["ts_code", "name", "open", "high", "low", "close",
+                     "pre_close", "pct_chg", "vol", "amount", "role", "reason"]
+
+
+def watchlist_frame(state_path: Path, trade_date: str) -> pd.DataFrame:
+    """把一份冻结的 watchlist 状态 join 当日行情，渲染成原"关注列表"表。
+
+    watchlist 是 state，不是行情：这里只做确定性 join，不做任何筛选判断。
+    """
+    state = load_yaml(state_path)
+    stocks = [s for s in (state.get("stocks") or [])
+              if str(s.get("status", "关注")) == "关注" and s.get("ts_code")]
+    if not stocks:
+        return pd.DataFrame(columns=WATCHLIST_COLUMNS)
+    codes = [str(s["ts_code"]) for s in stocks]
+    placeholders = ",".join(["?"] * len(codes))
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    try:
+        bars = con.execute(
+            f"""SELECT ts_code, open, high, low, close, pre_close,
+                       pct_chg, vol, amount
+                FROM fact_daily_bar
+                WHERE trade_date = ? AND ts_code IN ({placeholders})""",
+            [trade_date, *codes]).fetchdf()
+        names = con.execute(
+            f"SELECT ts_code, name FROM dim_stock WHERE ts_code IN ({placeholders})",
+            codes).fetchdf()
+    finally:
+        con.close()
+    meta = pd.DataFrame([{"ts_code": s["ts_code"], "name": s.get("name"),
+                          "role": s.get("role"), "reason": s.get("reason")}
+                         for s in stocks])
+    df = meta.merge(bars, on="ts_code", how="left").merge(
+        names, on="ts_code", how="left", suffixes=("", "_stock"))
+    df["name"] = df["name"].where(df["name"].notna(), df.get("name_stock"))
+    return df.loc[:, WATCHLIST_COLUMNS]
 
 
 # --------------------------------------------------------------------------- #
@@ -276,13 +321,17 @@ class Curator:
     def __init__(self, workspace: Workspace | None = None) -> None:
         self.ws = workspace or Workspace()
 
+    def _rel(self, path: Path) -> str:
+        """工作区相对路径（manifest / digest 展示用）。"""
+        return path.resolve().relative_to(self.ws.root.resolve()).as_posix()
+
     # ------------------------------------------------------------------ #
     # Digest 渲染（原 render_digest.py）
     # ------------------------------------------------------------------ #
     def render_digest(self, date: str, *, view: str = "configs/digest/judge_default.yaml",
                       data: str = "configs/data/data_recipe.yaml",
                       output: str | None = None, run_id: str | None = None,
-                      module: str = "judge") -> Path:
+                      module: str = "judge", state_root: str = "state") -> Path:
         """从标准快照按 View Recipe 渲染确定性 Digest，并写 input_manifest。
 
         Args:
@@ -291,6 +340,7 @@ class Curator:
             data: Data Recipe 路径。
             output: Digest 输出路径；默认 runs/live/<date>/<module>/digest.md。
             module: judge / trader。
+            state_root: watchlist/portfolio 状态根目录（实验传实验私有 state）。
         """
         date_dash = f"{date[:4]}-{date[4:6]}-{date[6:]}"
         view_path = self.ws.path(view)
@@ -359,6 +409,27 @@ class Curator:
                     lines.append("（breadth 缺失）")
                     gaps.append(f"{title}: breadth.csv 缺失")
                 lines.append("")
+                continue
+
+            if section.get("type") == "watchlist":
+                source = str(section.get("source", "judge"))
+                history = f"{state_root}/watchlist/{source}/history"
+                current = f"{state_root}/watchlist/{source}/current.yaml"
+                entry = StateStore(self.ws).as_of_path(
+                    current, date_dash, history, strict="before")
+                if entry is None:
+                    raise WorkspaceError(
+                        f"{title}: 缺 {date_dash} 之前的 {source} watchlist 快照"
+                        f"（{history}）；watchlist 是每日状态，不能回退 current")
+                df = watchlist_frame(entry, date_dash)
+                display_n = int(section.get("display_n", 50))
+                lines.append(f"输入：`{self._rel(entry)}`（严格早于 {date_dash}）；"
+                             f"关注中 {len(df)} 只。")
+                lines.append("")
+                lines.append(markdown_table(df, section.get("columns", []), display_n,
+                                            dictionary, exclude))
+                lines.append("")
+                inputs.append(self.ws.artifact_ref(entry))
                 continue
 
             table = section["table"]

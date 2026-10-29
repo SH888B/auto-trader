@@ -67,6 +67,10 @@ class TestSetup:
         assert watch.is_file()
         assert watch.read_bytes() == WS.path(
             "state/watchlist/judge/current.yaml").read_bytes()
+        # user watchlist 也是实验私有的
+        assert WS.path(exp.user_watchlist_target).is_file()
+        # 历史目录存在；T-1 快照在 prepare 时按需补齐（不继承当日）
+        assert (root / "state/watchlist/judge/history").is_dir()
 
     def test_refuses_overwrite(self, exp: Experiment) -> None:
         exp.setup()
@@ -97,6 +101,25 @@ class TestIsolation:
             f"{EXP_ROOT}/{EXP_ID}/runs/{DATE}/handoff/judge_task.yaml"))
         paths = [i["path"] for i in task["inputs"]]
         assert any(p.startswith(f"{EXP_ROOT}/{EXP_ID}/state/") for p in paths)
+        # Judge 输入是 T-1 的冻结快照，不是 current
+        assert task["watchlist_input"] == \
+            f"{EXP_ROOT}/{EXP_ID}/state/watchlist/judge/history/2026-10-27.yaml"
+
+    def test_prepare_requires_previous_day_snapshot(self) -> None:
+        """没有 T-1 冻结快照时必须报错，绝不回退 current。"""
+        base = WS.path("temp/_test_no_history/state/watchlist/judge/current.yaml")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_text("version: w0.0\nstocks: []\n", encoding="utf-8")
+        e = Experiment(EXP_ID, WS, RunLogger(log_path=LOG_PATH),
+                       exp_root=EXP_ROOT, watchlist_base=str(base))
+        try:
+            e.setup()
+            with pytest.raises(WorkspaceError, match="不能回退 current"):
+                e.prepare(DATE)
+        finally:
+            shutil.rmtree(WS.path(EXP_ROOT), ignore_errors=True)
+            shutil.rmtree(WS.path("temp/_test_no_history"), ignore_errors=True)
+            LOG_PATH.unlink(missing_ok=True)
 
 
 class TestRun:
