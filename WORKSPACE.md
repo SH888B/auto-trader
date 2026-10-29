@@ -1,8 +1,13 @@
 # 首分机器人工作空间
 
+> **V5 提示（2026-10-30）**：目录职责与数据链路以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。
+> 本文档里的 `data/curated`、`data/snapshots`、`state/*.yaml` 是过渡期旧路径，V5 迁移后删除；
+> 旧架构见 [docs/archive/](docs/archive/)。
+
 本工作空间服务一个目标：研究并执行“活跃题材的首次分歧—随后修复”交易，同时保证输入可追溯、无未来信息、规则可回滚。
 
-当前架构见 `ARCHITECTURE.md` 与 `ARCHITECTURE-V3.md`。本文件管资产边界和知识纪律。
+当前架构见 `ARCHITECTURE.md`（V5）与 `docs/archive/ARCHITECTURE-v3.md`（历史）。本文件管资产边界和知识纪律。
+
 
 ## 一、目录职责
 

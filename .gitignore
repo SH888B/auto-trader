@@ -17,6 +17,9 @@ reviews/
 backtests/
 # 过程文件
 archive/
+# 例外：旧架构文档要留在仓库里（docs/archive）
+!docs/archive/
+!docs/archive/**
 temp/
 inbox/
 DESIGN-*.md
