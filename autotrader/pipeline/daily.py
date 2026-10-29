@@ -89,12 +89,16 @@ class Daily:
         self.trader.prepare(date_dash)
 
     # ------------------------------------------------------------------ #
-    # settle：Trader.collect → Broker 回执 → Evaluator.score（第 8 步接通）
+    # settle：Trader.collect → Broker 回执 → Evaluator.score
+    # （用户裁决 2026-10-29：Broker/Evaluator/Presenter 后续重新设计，
+    #   暂时跳过，见 TODO「V4 模块重设计」）
     # ------------------------------------------------------------------ #
 
     def settle(self, as_of: str) -> None:
-        """日常第三步（待第 8 步 Broker/Evaluator 类化后接通）。"""
-        raise NotImplementedError("settle 将在第 8 步（Broker/Evaluator）接通")
+        """日常第三步：当前显式跳过，待 Broker/Evaluator 重设计后接通。"""
+        _, date_dash = self._day(as_of)
+        print(f"[daily] settle {date_dash} 跳过：Broker/Evaluator 待重设计后接通"
+              "（TODO「V4 模块重设计」）")
 
 
 __all__ = ["Daily"]
