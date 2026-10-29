@@ -141,8 +141,35 @@ def _validate_intents(args: argparse.Namespace) -> int:
     return 0
 
 
+def _experiment_setup(args: argparse.Namespace) -> None:
+    from .experiment import Experiment
+
+    Experiment(args.experiment,
+               watchlist_base=args.watchlist_base,
+               portfolio_base=args.portfolio_base).setup()
+
+
+def _experiment_prepare(args: argparse.Namespace) -> None:
+    from .experiment import Experiment
+
+    Experiment(args.experiment).prepare(args.date)
+
+
+def _experiment_continue(args: argparse.Namespace) -> None:
+    from .experiment import Experiment
+
+    Experiment(args.experiment).continue_(args.date)
+
+
+def _experiment_run(args: argparse.Namespace) -> None:
+    from .experiment import Experiment
+
+    Experiment(args.experiment).run(args.start, args.end,
+                                    with_data=args.with_data)
+
+
 # --------------------------------------------------------------------------- #
-# 占位模块（第 7/8 步注册：daily / validate / score / logs）
+# 占位模块（第 8 步注册：score / logs）
 # --------------------------------------------------------------------------- #
 
 def _not_yet(module: str) -> Any:
@@ -261,6 +288,30 @@ def build_parser() -> argparse.ArgumentParser:
     p = vsub.add_parser("intents", help="Trader order_intents schema + 引用校验")
     p.add_argument("path", help="order_intents.json 路径（workspace 内）")
     p.set_defaults(handler=_validate_intents)
+
+    # ------------------------------ experiment ------------------------------ #
+    p_exp = sub.add_parser("experiment", help="实验回放：独立 state + 幂等推进")
+    esub = p_exp.add_subparsers(dest="command", required=True)
+    p = esub.add_parser("setup", help="建实验目录并复制基线 state（防覆盖）")
+    p.add_argument("experiment", help="实验 ID，如 E008")
+    p.add_argument("--watchlist-base", help="judge watchlist 基线文件；默认 live current")
+    p.add_argument("--portfolio-base", help="portfolio 基线文件；默认 live current")
+    p.set_defaults(handler=_experiment_setup)
+    p = esub.add_parser("prepare", help="实验某日：数据 → Judge 任务包")
+    p.add_argument("experiment", help="实验 ID")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.set_defaults(handler=_experiment_prepare)
+    p = esub.add_parser("continue", help="实验某日：验收 review → Trader 任务包")
+    p.add_argument("experiment", help="实验 ID")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.set_defaults(handler=_experiment_continue)
+    p = esub.add_parser("run", help="幂等推进区间：自动的自动，缺 LLM 产物的列待办")
+    p.add_argument("experiment", help="实验 ID")
+    p.add_argument("--start", required=True, help="起始日 YYYYMMDD（含）")
+    p.add_argument("--end", required=True, help="结束日 YYYYMMDD（含）")
+    p.add_argument("--with-data", action="store_true",
+                   help="缺快照时自动跑 Scout 全日链（历史外部数据可能缺失）")
+    p.set_defaults(handler=_experiment_run)
 
     # ------------------------------ 占位 ------------------------------ #
     for name, help_text in [

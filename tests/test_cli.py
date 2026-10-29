@@ -175,6 +175,34 @@ class TestValidateCli:
             p.unlink()
 
 
+class TestExperimentDispatch:
+    def _patch(self, monkeypatch: pytest.MonkeyPatch,
+               recorder: _Recorder) -> None:
+        monkeypatch.setattr("autotrader.experiment.Experiment",
+                            lambda *a, **k: recorder)
+
+    def test_setup(self, recorder: _Recorder,
+                   monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch(monkeypatch, recorder)
+        assert cli.main(["experiment", "setup", "E008"]) == 0
+        assert recorder.calls == [("setup", (), {})]
+
+    def test_prepare(self, recorder: _Recorder,
+                     monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch(monkeypatch, recorder)
+        cli.main(["experiment", "prepare", "E008", "--date", "20261029"])
+        assert recorder.calls == [("prepare", ("20261029",), {})]
+
+    def test_run(self, recorder: _Recorder,
+                 monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch(monkeypatch, recorder)
+        cli.main(["experiment", "run", "E008", "--start", "20261019",
+                  "--end", "20261028", "--with-data"])
+        assert recorder.calls == [
+            ("run", ("20261019", "20261028"), {"with_data": True}),
+        ]
+
+
 class TestPlaceholderModules:
     @pytest.mark.parametrize("module", ["score", "logs"])
     def test_returns_2(self, module: str,

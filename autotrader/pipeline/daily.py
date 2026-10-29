@@ -22,7 +22,9 @@ class Daily:
                  logger: RunLogger | None = None,
                  run_root: str = "runs/live",
                  judge_profile: str | None = None,
-                 trader_profile: str | None = None) -> None:
+                 trader_profile: str | None = None,
+                 watchlist_target: str | None = None,
+                 portfolio_path: str | None = None) -> None:
         self.ws = workspace or Workspace()
         self.logger = logger or RunLogger()
         self.run_root = run_root
@@ -32,6 +34,10 @@ class Daily:
             judge_kw["profile_path"] = judge_profile
         if trader_profile:
             trader_kw["profile_path"] = trader_profile
+        if watchlist_target:
+            judge_kw["watchlist_target"] = watchlist_target
+        if portfolio_path:
+            trader_kw["portfolio_path"] = portfolio_path
         self.scout = Scout(self.ws)
         self.curator = Curator(self.ws)
         self.judge = Judge(self.ws, self.logger, **judge_kw)
