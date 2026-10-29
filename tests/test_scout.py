@@ -105,6 +105,50 @@ def test_scout_does_not_touch_state() -> None:
     assert source.count("watchlist_today") == 1
 
 
+def test_scout_has_no_curated_layer() -> None:
+    """M3 后 Scout 不再读写 data/curated。"""
+    import inspect
+
+    source = inspect.getsource(scout)
+    assert 'data" / "curated' not in source
+    assert "data/curated" not in source
+
+
+def test_build_fact_limit_flag_reads_raw(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = pd.DataFrame({
+        "ts_code": ["600000.SH"], "flag": ["涨停(一字)"], "name": ["测试"],
+        "close": [10.0], "pct_chg": [10.0], "amount": [1000.0],
+        "up_limit": [10.0], "down_limit": [9.0],
+    })
+    monkeypatch.setattr(scout, "compute_limit_flags", lambda date: frame)
+    out = scout.build_fact_limit_flag("20261028")
+    assert out is not None
+    assert out.iloc[0]["ts_code"] == "600000.SH"
+    assert out.iloc[0]["flag"] == "涨停(一字)"
+
+
+def test_build_fact_breadth_reads_raw(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(scout, "load_trade_cal", lambda: ["20261028"])
+    monkeypatch.setattr(scout, "compute_breadth", lambda date, cal: {
+        "上涨家数": 3000, "涨停家数(含ST)": 50, "两市成交额(亿元)": 9000,
+    })
+    out = scout.build_fact_breadth("20261028")
+    assert out is not None
+    assert out.iloc[0]["up_cnt"] == 3000
+    assert out.iloc[0]["limit_up_cnt"] == 50
+
+
+def test_select_uses_in_memory_gain_and_panel() -> None:
+    """区间涨幅/指数面板直接在内存计算，不读 curated CSV。"""
+    import inspect
+
+    from autotrader.scout import Scout
+
+    source = inspect.getsource(Scout._select_stocks_impl)
+    assert "compute_gain_periods(date" in source
+    assert "compute_index_panel(date)" in source
+
+
 # --------------------------------------------------------------------------- #
 # 稳定性回归：10-28 快照数据字段与冻结基线一致
 # --------------------------------------------------------------------------- #

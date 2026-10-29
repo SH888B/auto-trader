@@ -18,7 +18,7 @@
 | `configs/` | data/digest/query/broker/evaluation 配置 | 密钥、单日结论 |
 | `config/` | 取数通道密钥与连接配置；只允许取数客户端读取 | 业务配置、实验配置 |
 | `contracts/` | review、order intent、委托、成交、运行清单与日志 schema | 具体某天的数据 |
-| `data/` | raw、curated、标准 snapshots、数仓和客观数据资产 | Agent 专属 Digest、手工覆盖 raw |
+| `data/` | raw、标准快照（过渡期）、数仓和客观数据资产 | Agent 专属 Digest、手工覆盖 raw |
 | `state/` | Judge watchlist、user watchlist、portfolio 的 current 与历史快照 | 长期稳定规则 |
 | `experiments/` | 实验定义、冻结 Bundle、初始状态、Run、Score 与 verdict | 未声明输入、事后修改的原始判断 |
 | `runs/live/` | 非实验的日常 Judge/Trader/Broker 产物 | 实验假设与对照配置 |

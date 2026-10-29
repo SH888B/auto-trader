@@ -89,6 +89,38 @@ def markdown_table(df: pd.DataFrame, columns: list[str], limit: int,
 WATCHLIST_COLUMNS = ["ts_code", "name", "open", "high", "low", "close",
                      "pre_close", "pct_chg", "vol", "amount", "role", "reason"]
 
+#: fact_breadth 列 → Digest 里的中文指标名（顺序即展示顺序）
+BREADTH_LABELS = [
+    ("up_cnt", "上涨家数"),
+    ("down_cnt", "下跌家数"),
+    ("limit_up_cnt", "涨停家数(含ST)"),
+    ("limit_down_cnt", "跌停家数(含ST)"),
+    ("gt5_cnt", "涨幅>5%家数"),
+    ("total_amount_yi", "两市成交额(亿元)"),
+    ("prev_lu_cnt", "昨涨停家数"),
+    ("prev_lu_open_premium", "昨涨停今开盘均价涨幅%"),
+    ("prev_lu_close_premium", "昨涨停今收盘均价涨幅%"),
+    ("prev_ld_feedback", "昨跌停今收盘均价涨幅%"),
+]
+
+
+def breadth_frame(trade_date: str) -> pd.DataFrame | None:
+    """从 ``fact_breadth`` 取当日广度，转成 Digest 的两列长表。"""
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    try:
+        rows = con.execute(
+            "SELECT * FROM fact_breadth WHERE trade_date = CAST(? AS DATE)",
+            [trade_date]).fetchdf()
+    finally:
+        con.close()
+    if rows.empty:
+        return None
+    row = rows.iloc[0]
+    return pd.DataFrame({
+        "指标": [label for _, label in BREADTH_LABELS],
+        "值": [row.get(column) for column, _ in BREADTH_LABELS],
+    })
+
 
 def watchlist_frame(state_path: Path, trade_date: str) -> pd.DataFrame:
     """把一份冻结的 watchlist 状态 join 当日行情，渲染成原"关注列表"表。
@@ -397,17 +429,15 @@ class Curator:
                     lines.append(f"> {note_line.strip()}")
                 lines.append("")
             if section.get("type") == "breadth":
-                path = ROOT / "data" / "curated" / date_dash / "breadth.csv"
-                if path.exists():
-                    df = pd.read_csv(path, encoding="utf-8-sig")
+                df = breadth_frame(date_dash)
+                if df is not None and not df.empty:
                     note_meta(df)
                     lines.append(markdown_table(df, section.get("columns", []),
                                                 int(section.get("display_n", 100)),
                                                 dictionary, exclude))
-                    inputs.append(self.ws.artifact_ref(path))
                 else:
                     lines.append("（breadth 缺失）")
-                    gaps.append(f"{title}: breadth.csv 缺失")
+                    gaps.append(f"{title}: fact_breadth 缺失")
                 lines.append("")
                 continue
 

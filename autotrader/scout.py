@@ -188,7 +188,7 @@ def fetch_light_date(client: TushareClient, date: str) -> dict[str, int]:
 
 
 # --------------------------------------------------------------------------- #
-# 加工层（原 build_snapshot.py）：raw → curated
+# 核对报告（原 build_snapshot.py）：raw 校验，不再落 curated
 # --------------------------------------------------------------------------- #
 def load_daily_raw(date: str) -> pd.DataFrame | None:
     """加载某日全市场日线。新格式优先，回退 data/raw/daily_<date>.csv 旧文件。
@@ -506,12 +506,14 @@ def build_fact_stk_limit(date: str) -> pd.DataFrame | None:
 
 
 def build_fact_limit_flag(date: str) -> pd.DataFrame | None:
-    path = ROOT / "data" / "curated" / f"{date[:4]}-{date[4:6]}-{date[6:]}" / "limit_flags.csv"
-    if not path.exists():
+    """涨跌停标记：直接由 raw 计算，不再读写 curated CSV。"""
+    try:
+        df = compute_limit_flags(date)
+    except FileNotFoundError:
         return None
-    df = pd.read_csv(path, dtype={"ts_code": str})
+    df = df.copy()
     df["trade_date"] = to_date(pd.Series([date] * len(df)))
-    df["source_file"] = f"curated/{path.parent.name}/limit_flags.csv"
+    df["source_file"] = f"daily/daily_{date}.json+stk_limit/stk_limit_{date}.json"
     df["ingested_at"] = _NOW
     return df[["trade_date", "ts_code", "flag", "source_file", "ingested_at"]]
 
@@ -573,11 +575,11 @@ def build_fact_kpl_list(date: str) -> pd.DataFrame | None:
 
 
 def build_fact_breadth(date: str) -> pd.DataFrame | None:
-    path = ROOT / "data" / "curated" / f"{date[:4]}-{date[4:6]}-{date[6:]}" / "breadth.csv"
-    if not path.exists():
+    """广度指标：直接由 raw 计算，不再读写 curated CSV。"""
+    try:
+        m = compute_breadth(date, load_trade_cal())
+    except FileNotFoundError:
         return None
-    kv = pd.read_csv(path)
-    m = dict(zip(kv["指标"], kv["值"]))
     row = {
         "trade_date": to_date(pd.Series([date]))[0],
         "up_cnt": m.get("上涨家数"), "down_cnt": m.get("下跌家数"),
@@ -587,7 +589,7 @@ def build_fact_breadth(date: str) -> pd.DataFrame | None:
         "prev_lu_open_premium": m.get("昨涨停今开盘均价涨幅%"),
         "prev_lu_close_premium": m.get("昨涨停今收盘均价涨幅%"),
         "prev_ld_feedback": m.get("昨跌停今收盘均价涨幅%"),
-        "source_file": f"curated/{path.parent.name}/breadth.csv", "ingested_at": _NOW,
+        "source_file": f"daily+daily_stk_limit/{date}", "ingested_at": _NOW,
     }
     return pd.DataFrame([row])
 
@@ -959,40 +961,36 @@ class Scout:
     # 加工层
     # ------------------------------------------------------------------ #
     def build_snapshot(self, date: str, *, auto_fetch: bool = True) -> None:
-        """raw → curated：涨跌停标记、广度、指数面板、区间涨幅、核对报告。"""
+        """校验 raw 完整性并生成核对报告；**不再落 curated CSV**。
+
+        raw → DuckDB 的入库由 ``load_warehouse`` 直接完成；本方法只用于
+        盘后核对（涨停家数、广度、指数面板、区间涨幅行数）。
+        """
         client = None if not auto_fetch else TushareClient(pace=1.5, max_retries=4, timeout=60)
         cal = load_trade_cal()
         if date not in cal:
             raise ValueError(f"{date} 不是交易日")
 
         date_dash = f"{date[:4]}-{date[4:6]}-{date[6:]}"
-        out_dir = ROOT / "data" / "curated" / date_dash
-        out_dir.mkdir(parents=True, exist_ok=True)
-
         flags = compute_limit_flags(date)
-        flags.to_csv(out_dir / "limit_flags.csv", index=False, encoding="utf-8-sig")
         n_lu = int(flags["flag"].str.startswith("涨停").sum())
         n_ld = int((flags["flag"] == "跌停").sum())
         print(f"[limit_flags] 涨停 {n_lu}（一字 {int((flags['flag'] == '涨停(一字)').sum())}）"
-              f"/ 跌停 {n_ld} -> limit_flags.csv")
+              f"/ 跌停 {n_ld}")
 
         breadth = compute_breadth(date, cal)
-        with open(out_dir / "breadth.csv", "w", newline="", encoding="utf-8-sig") as fp:
-            writer = csv.writer(fp)
-            writer.writerow(["指标", "值"])
-            writer.writerows(breadth.items())
-        print(f"[breadth] 两市成交额 {breadth.get('两市成交额(亿元)')} 亿 -> breadth.csv")
+        print(f"[breadth] 两市成交额 {breadth.get('两市成交额(亿元)')} 亿")
 
         panel = compute_index_panel(date)
-        panel.to_csv(out_dir / "index_panel.csv", index=False, encoding="utf-8-sig")
-        print(f"[index_panel] {len(panel)} 个指数 -> index_panel.csv")
+        print(f"[index_panel] {len(panel)} 个指数")
 
         gains = compute_gain_periods(date, cal, client)
-        gains.to_csv(out_dir / "gain_periods.csv", index=False, encoding="utf-8-sig")
-        print(f"[gain_periods] {len(gains)} 只 -> gain_periods.csv")
+        print(f"[gain_periods] {len(gains)} 只")
 
+        out_dir = ROOT / "data" / "meta" / "verify" / date_dash
+        out_dir.mkdir(parents=True, exist_ok=True)
         write_verify_report(date, out_dir, flags, breadth, panel)
-        print("[verify] -> VERIFY_report.md")
+        print(f"[verify] -> {out_dir / 'VERIFY_report.md'}")
         if client and client.call_log:
             print(f"（历史窗口补拉 {len(client.call_log)} 次调用）")
 
@@ -1000,7 +998,7 @@ class Scout:
     # 数仓入库层
     # ------------------------------------------------------------------ #
     def load_warehouse(self, date: str | None = None, *, all_dates: bool = False) -> None:
-        """raw/curated → DuckDB 数仓（幂等，先按日期删后插）。"""
+        """raw → DuckDB 数仓（幂等，先按日期删后插）。"""
         global _NOW  # 每次调用刷新 ingested_at（原脚本为进程级常量）
         _NOW = datetime.now()
 
@@ -1136,8 +1134,8 @@ class Scout:
             cand["收盘回落%"] = ((cand["close"] - cand["high"]) / cand["high"] * 100).round(2)
             save(cand.nsmallest(int(pit_cfg.get("n", 20)), "收盘回落%"),
                  "pit_top", "当日坑货榜（收盘距高点回落%）")
-        gp_path = ROOT / "data" / "curated" / date_dash / "gain_periods.csv"
-        gp = pd.read_csv(gp_path) if gp_path.exists() else pd.DataFrame()
+        # 区间涨幅：直接从 raw 计算（不落 curated CSV）
+        gp = compute_gain_periods(date, load_trade_cal(), None)
         gw_cfg = groups.get("gain_week", {})
         gw_col = f"近{gw_cfg.get('window', 5)}日涨幅%"
         if gw_cfg and not gp.empty and gw_col in gp.columns:
@@ -1258,10 +1256,10 @@ class Scout:
                  f"昨涨停今日反馈（{prev[0]} 集合）")
             fb2 = pool[pool["ts_code"].isin(prev_ld)][["ts_code", "name", "pct_chg", "amount"]]
             save(fb2.sort_values("pct_chg"), "prev_ld_feedback", "昨跌停今日反馈")
-        # 指数面板：复制 curated 产物
-        panel = ROOT / "data" / "curated" / date_dash / "index_panel.csv"
-        if panel.exists():
-            save(pd.read_csv(panel), "index_panel", "第一层指数量能")
+        # 指数面板：直接由 raw 计算（不落 curated CSV）
+        panel = compute_index_panel(date)
+        if not panel.empty:
+            save(panel, "index_panel", "第一层指数量能")
         # Scout 不读任何 state：关注列表由 Curator 渲染 digest 时按 as_of 读取；
         # 载体生命周期只从涨停结构（客观数据）取候选，不掺 watchlist。
 
@@ -1637,7 +1635,6 @@ class Scout:
             if readiness["status"] == "blocked" and auto_fetch:
                 print(f"[run_date] 数据未就绪，先取数：{readiness['blocking']}")
                 self.fetch_daily([date])
-            self.build_snapshot(date, auto_fetch=auto_fetch)
             self.load_warehouse(date)
             self.select_stocks(date)
             self.finalize(date)

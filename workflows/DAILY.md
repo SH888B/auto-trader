@@ -23,7 +23,7 @@ auto-trader scout run --date YYYYMMDD
 ```bash
 auto-trader scout fetch --dates YYYYMMDD        # 只取数
 auto-trader scout load --date YYYYMMDD          # 只入库
-auto-trader scout build --date YYYYMMDD         # 只加工 curated
+auto-trader scout build --date YYYYMMDD         # 校验 raw + 核对报告（不落中间文件）
 auto-trader scout select --date YYYYMMDD        # 只筛选
 auto-trader scout finalize --date YYYYMMDD      # 只冻结清单
 ```

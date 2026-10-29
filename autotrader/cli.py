@@ -346,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ingest-all", action="store_true", help="不取数，仅把 raw 全量灌入数仓")
     p.set_defaults(handler=_scout_load)
 
-    p = ssub.add_parser("build", help="加工层：生成 curated 数据与核对报告")
+    p = ssub.add_parser("build", help="校验 raw 并生成核对报告（不落中间文件）")
     p.add_argument("--date", required=True, help="交易日 YYYYMMDD")
     p.add_argument("--no-auto-fetch", action="store_true",
                    help="历史窗口缺失时不自动补拉")

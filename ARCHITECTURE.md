@@ -5,7 +5,7 @@
 - 状态：**设计定稿，分阶段实施**
 - 取代：[docs/archive/ARCHITECTURE-v3.md](docs/archive/ARCHITECTURE-v3.md)
 - 已落地：取数账本 / 就绪门（PR-1）、取数契约 `sources.yaml`、watchlist 每日全量表
-- 过渡说明：迁移完成前，旧路径（`data/curated`、`data/snapshots`、`state/*.yaml`）仍然存在；以本文 §13 的阶段为准
+- 过渡说明：迁移完成前，旧路径（`data/snapshots`、`state/*.yaml`）仍然存在；以本文 §13 的阶段为准
 
 ---
 
@@ -591,7 +591,7 @@ ON a.ts_code = b.ts_code;
 |---|---|---|
 | M1（已完成） | 取数账本 + 原子 raw + readiness + sources.yaml | 19:00 不再误报 kpl；故障注入测试 |
 | M2（已完成） | watchlist 每日全量表 + `YYYYMMDD` 日期工具 | 能查任意日全量、差异、时点 |
-| M3 | 删 `curated/`：`build` 直接算完写 DuckDB | 同一日期重跑，表内容一致 |
+| M3（已完成） | 删 `curated/`：`build_snapshot` 只出核对报告；`build_fact_*` 直接由 raw 计算 | 同一日期重跑，表内容一致；derived 字节稳定 |
 | M4 | 删 `derived/`：prompt 直接查 DuckDB | 新旧 prompt 内容一致（列序允许不同） |
 | M5 | schema v5 事实表 + `dim_trade_date` + `available_at`；日期切到 `YYYYMMDD` | `data verify` 全绿；`runs/20261028` 路径生效 |
 | M6 | 删 `snapshot.yaml` / `state/*.yaml`；pack = DB 副本 | relay 断开仍能生成 prompt |
