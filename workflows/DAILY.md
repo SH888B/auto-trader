@@ -1,21 +1,36 @@
-# 每日执行流程 v3
+# 每日执行流程 v4（auto-trader 命令版）
 
 每日链路分为 Scout 数据、Curator 上下文、Judge 复盘、Trader 订单意图、人工 Broker 执行和 Evaluator 后验评价。Judge 不再直接生成三价交易单。
+
+> 迁移状态：Scout / Curator 已收口到 `auto-trader` 命令（第 6 步完成）；Judge / Trader /
+> Evaluator / Presenter 仍在迁移中，第三~七节保留旧脚本命令，迁移完成后统一替换。
 
 ## 一、Scout：定时或手动准备标准数据
 
 1. 确认交易日、最近收盘日、下一交易日和 `as_of`。
-2. 依次运行取数、清洗、入库和筛选；任一关键步骤失败则停止。
+2. 一条命令跑完整数据链（取数→入库→筛选→冻结），任一关键步骤失败则停止：
+
+```bash
+auto-trader scout run --date YYYYMMDD
+```
+
 3. 检查 `data/snapshots/YYYY-MM-DD/snapshot.yaml` 的数据覆盖、版本和缺口。
 4. Scout 不生成 Agent Digest，也不自动触发 Judge/Trader。
 
-常用命令：
+需要单步执行或排障时用：
 
 ```bash
-uv run python scripts/scout/build_snapshot.py --date YYYYMMDD
-uv run python scripts/scout/load_to_warehouse.py --date YYYYMMDD
-uv run python scripts/scout/select_stocks.py --date YYYYMMDD
-uv run python scripts/scout/finalize_snapshot.py --date YYYYMMDD
+auto-trader scout fetch --dates YYYYMMDD        # 只取数
+auto-trader scout load --date YYYYMMDD          # 只入库
+auto-trader scout build --date YYYYMMDD         # 只加工 curated
+auto-trader scout select --date YYYYMMDD        # 只筛选
+auto-trader scout finalize --date YYYYMMDD      # 只冻结清单
+```
+
+历史回补（核对缺口→补拉→可选链式重建）：
+
+```bash
+auto-trader scout catchup --start YYYYMMDD --end YYYYMMDD [--check|--replay]
 ```
 
 板块成分（按需，非每日必跑）：`get_board_momentum` 查询依赖 `dim_board_member`，
@@ -24,21 +39,20 @@ uv run python scripts/scout/finalize_snapshot.py --date YYYYMMDD
 当日板块榜时用 `--boards 885xxx.TI` 显式补取）：
 
 ```bash
-uv run python scripts/scout/fetch_theme_members.py --date YYYYMMDD
+auto-trader scout members --date YYYYMMDD
 ```
 
 ## 二、Curator：生成 Judge 初始视图
 
 ```bash
-uv run python scripts/common/run_logged.py \
-  --run-id live-YYYYMMDD-judge --module judge --as-of YYYY-MM-DD \
-  --artifact-path runs/live/YYYY-MM-DD/judge/digest.md -- \
-  uv run python scripts/curator/render_digest.py \
-  --date YYYYMMDD --view configs/digest/judge_default.yaml \
+auto-trader curator digest --date YYYYMMDD --module judge \
   --output runs/live/YYYY-MM-DD/judge/digest.md --run-id live-YYYYMMDD-judge
 ```
 
 检查 Digest 与 `input_manifest.yaml`。更换 display_n 只改 View Recipe，不重跑 Scout。
+
+> 过渡说明：run 日志登记（原 `run_logged.py` 外壳）将在第 7 步 `daily prepare` 统一接管，
+> 此前 Judge/Trader 等模块的运行登记仍按第七节旧方式执行。
 
 ## 三、Judge：只复盘
 
@@ -59,17 +73,26 @@ uv run python scripts/judge/validate_review.py \
 5. 有 `watchlist_updates` 时，由 Curator 应用并冻结快照；user watchlist 只能由用户修改。
 
 ```bash
-uv run python scripts/curator/apply_watchlist_updates.py \
+auto-trader curator watchlist apply \
   --review runs/live/YYYY-MM-DD/judge/review.json \
   --target state/watchlist/judge/current.yaml
 ```
 
+user watchlist 只能由用户修改，CLI 同样不允许对其执行 apply。
+
 ## 四、Trader：按需查询并生成订单意图
 
 1. Curator 组装 Judge review、Trader Profile、初始 Trader View 和 portfolio 快照。
-2. Trader 仅通过 `scripts/curator/query_data.py` 查询板块候选、日线或快照表。
+2. Trader 仅通过受控查询拉取板块候选、日线或快照表：
+
+```bash
+auto-trader curator query --request <task.yaml>
+```
+
+> 过渡命令：`uv run python scripts/curator/query_data.py --request <task.yaml>`
+
 3. `get_theme_members` 当前只返回涨跌停事件候选，不能声称完整板块成员覆盖。
-4. **对 Judge 预判的明日首分板块，Trader 必须调用 `get_board_momentum`**（`board_codes` 传全部预判板块、`top_n=20`），取全量成分按两日涨幅排序的清单，作为择股与挂价预测的主输入；查询前确认 Scout 已用 `fetch_theme_members.py` 维护 `dim_board_member`。
+4. **对 Judge 预判的明日首分板块，Trader 必须调用 `get_board_momentum`**（`board_codes` 传全部预判板块、`top_n=20`），取全量成分按两日涨幅排序的清单，作为择股与挂价预测的主输入；查询前确认 Scout 已用 `auto-trader scout members --date YYYYMMDD` 维护 `dim_board_member`。
 5. 输出 `order_intents.json`；空仓必须填写 `no_trade_reason`。
 6. 校验 schema、引用 hash 和三价关系：
 
@@ -101,7 +124,7 @@ uv run python scripts/evaluation/score_v3.py \
 
 ## 七、每日日志与落档
 
-每次脚本或 Agent 运行都应使用 `scripts/common/run_logged.py` 登记。结束后刷新筛选页面：
+每次脚本或 Agent 运行都应登记 run 日志。结束后刷新筛选页面：
 
 ```bash
 uv run python scripts/presenter/render_log_viewer.py
