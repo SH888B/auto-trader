@@ -22,11 +22,17 @@ def _scout_run(args: argparse.Namespace) -> None:
     Scout().run_date(args.date, auto_fetch=not args.no_auto_fetch)
 
 
-def _scout_fetch(args: argparse.Namespace) -> None:
+def _scout_fetch(args: argparse.Namespace) -> int:
+    from .fetch import FetchIncomplete
     from .scout import Scout
 
-    # --force 为兼容旧命令保留，当前实现中不生效（原脚本即如此，见 Scout.fetch_daily）
-    Scout().fetch_daily(args.dates, light=args.light, force=args.force)
+    # --force 为兼容旧命令保留，现在表示强制重抓
+    try:
+        Scout().fetch_daily(args.dates, light=args.light, force=args.force)
+    except FetchIncomplete as exc:
+        print(f"[blocked] {exc}")
+        return 4
+    return 0
 
 
 def _scout_load(args: argparse.Namespace) -> None:
@@ -70,6 +76,60 @@ def _scout_members(args: argparse.Namespace) -> None:
                                 max_age_days=args.max_age_days)
 
 
+def _scout_sync(args: argparse.Namespace) -> int:
+    from .fetch import Fetcher
+
+    result = Fetcher().sync(args.date, window=args.window,
+                            deadline_minutes=args.deadline, force=args.force)
+    for name, record in result["results"].items():
+        print(f"  {name:22s} {str(record.get('status')):16s} rows={record.get('rows', 0)}")
+    readiness = result["readiness"]
+    print(f"[readiness] {readiness['status']} "
+          f"blocking={readiness['blocking'] or '-'} "
+          f"degraded_by={readiness['degraded_by'] or '-'}")
+    if readiness["status"] == "blocked":
+        return 4
+    if readiness["status"] == "degraded":
+        return 3
+    return 0
+
+
+def _scout_status(args: argparse.Namespace) -> int:
+    import json
+
+    from .fetch import Fetcher
+
+    readiness = Fetcher().status(args.date)
+    if args.json:
+        print(json.dumps(readiness, ensure_ascii=False, indent=2))
+    else:
+        print(f"{readiness['trade_date']}  status={readiness['status']}")
+        for name, detail in readiness["detail"].items():
+            print(f"  {name:22s} {str(detail.get('state')):16s} "
+                  f"rows={detail.get('rows')} "
+                  f"rev={detail.get('revision', '-')} "
+                  f"avail={detail.get('available_at', '-')}")
+        if readiness["gaps"]:
+            print(f"  gaps: {readiness['gaps']}")
+    if readiness["status"] == "blocked":
+        return 4
+    if readiness["status"] == "degraded":
+        return 3
+    return 0
+
+
+def _scout_verify(args: argparse.Namespace) -> int:
+    from .fetch import Fetcher
+
+    issues = Fetcher().verify(args.date)
+    if not issues:
+        print(f"[OK] {args.date} 账本与 raw 一致")
+        return 0
+    for issue in issues:
+        print(f"[问题] {issue}")
+    return 1
+
+
 def _curator_digest(args: argparse.Namespace) -> None:
     from .curator import Curator
 
@@ -91,10 +151,16 @@ def _curator_watchlist_apply(args: argparse.Namespace) -> None:
                                       snapshot=args.snapshot)
 
 
-def _daily_prepare(args: argparse.Namespace) -> None:
+def _daily_prepare(args: argparse.Namespace) -> int:
+    from .core import WorkspaceError
     from .pipeline.daily import Daily
 
-    Daily().prepare(args.as_of)
+    try:
+        Daily().prepare(args.as_of, allow_degraded=args.allow_degraded)
+    except WorkspaceError as exc:
+        print(f"[blocked] {exc}")
+        return 4
+    return 0
 
 
 def _daily_continue(args: argparse.Namespace) -> None:
@@ -242,6 +308,25 @@ def build_parser() -> argparse.ArgumentParser:
                    help="同戳 raw 缓存新鲜期（天）")
     p.set_defaults(handler=_scout_members)
 
+    p = ssub.add_parser("sync", help="按数据源契约抓取一个窗口并记账（幂等）")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.add_argument("--window", default="all", choices=["all", "evening", "morning"],
+                   help="调度窗口：evening=收盘后，morning=次日早间增强")
+    p.add_argument("--deadline", type=float, default=30.0,
+                   help="本次同步的总时限（分钟），到点即停并保留 pending")
+    p.add_argument("--force", action="store_true",
+                   help="强制重抓（绕过已 ok 跳过与 not_due）")
+    p.set_defaults(handler=_scout_sync)
+
+    p = ssub.add_parser("status", help="查看某日数据就绪度（readiness）")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.add_argument("--json", action="store_true", help="输出 JSON")
+    p.set_defaults(handler=_scout_status)
+
+    p = ssub.add_parser("verify", help="账本与 raw 对账（sha256/行数/缺失）")
+    p.add_argument("--date", required=True, help="交易日 YYYYMMDD 或 YYYY-MM-DD")
+    p.set_defaults(handler=_scout_verify)
+
     # ------------------------------ curator ------------------------------ #
     p_curator = sub.add_parser("curator", help="上下文：Digest 渲染、受控查询、Bundle、watchlist")
     csub = p_curator.add_subparsers(dest="command", required=True)
@@ -274,6 +359,8 @@ def build_parser() -> argparse.ArgumentParser:
     dsub = p_daily.add_subparsers(dest="command", required=True)
     p = dsub.add_parser("prepare", help="数据 → Judge 交接包（幂等，可重跑）")
     p.add_argument("--as-of", required=True, help="交易日 YYYY-MM-DD 或 YYYYMMDD")
+    p.add_argument("--allow-degraded", action="store_true",
+                   help="允许在 degraded 数据上继续（缺口会写入 input_manifest）")
     p.set_defaults(handler=_daily_prepare)
     p = dsub.add_parser("continue", help="验收 review → Trader 交接包（幂等，可重跑）")
     p.add_argument("--as-of", required=True, help="交易日 YYYY-MM-DD 或 YYYYMMDD")

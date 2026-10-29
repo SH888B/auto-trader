@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from ..core import RunLogger, Workspace
+from ..core import RunLogger, Workspace, WorkspaceError
 from ..curator import Curator
 from ..judge import Judge
 from ..scout import Scout
@@ -56,11 +56,22 @@ class Daily:
     # prepare：Scout（缺快照才跑）→ judge digest → Judge 任务包
     # ------------------------------------------------------------------ #
 
-    def prepare(self, as_of: str) -> None:
+    def prepare(self, as_of: str, *, allow_degraded: bool = False) -> None:
         """日常第一步：数据 → Judge 交接包。幂等，可重跑。"""
         day, date_dash = self._day(as_of)
         snapshot = self.ws.path(f"data/snapshots/{date_dash}/snapshot.yaml")
         if not snapshot.is_file():
+            from ..fetch import Fetcher
+
+            readiness = Fetcher(self.ws).status(day)
+            if readiness["status"] == "blocked":
+                raise WorkspaceError(
+                    f"[daily] {date_dash} 数据未就绪（blocked）：{readiness['blocking']}；"
+                    "先跑 auto-trader scout sync --date " + day)
+            if readiness["status"] == "degraded" and not allow_degraded:
+                raise WorkspaceError(
+                    f"[daily] {date_dash} 数据降级：{readiness['degraded_by']}；"
+                    "确认可接受后加 --allow-degraded（缺口会写入 input_manifest）")
             print(f"[daily] 缺快照 {snapshot}，跑 Scout 全日链…")
             self.scout.run_date(day)
         else:

@@ -908,36 +908,48 @@ class Scout:
 
         Args:
             dates: 交易日 YYYYMMDD 列表；非交易日自动跳过。
-            light: 轻量模式：仅日线 + 涨跌停价（历史回补用）。
-            force: 保留兼容参数（原实现未实际生效；取数幂等依赖 save_raw 跳过逻辑）。
+            light: 轻量模式：仅日线 + 涨跌停价（历史回补窗口用）。
+            force: 强制重抓（绕过"已 ok 跳过"，也绕过未到可用时间的 not_due）。
         """
-        del force  # 原脚本 --force 为占位未生效，保持行为一致
+        from .fetch import Fetcher, FetchIncomplete
+
         client = TushareClient(pace=1.5, max_retries=5, timeout=180)
         trading_days = ensure_trade_cal(client)
+        wanted = [d for d in dates if d in trading_days]
         for d in dates:
             if d not in trading_days:
                 print(f"[跳过] {d} 不是交易日")
-                continue
+        if not wanted:
+            raise ValueError("没有可抓取的交易日")
 
         if not light:
             ensure_weekly_caches(client)
-            ensure_index_history(client, max(dates))
+            ensure_index_history(client, max(wanted))
 
+        fetcher = Fetcher(workspace=self.ws, client_factory=lambda: client)
         t0 = time.monotonic()
-        for d in dates:
-            if d not in trading_days:
-                continue
-            try:
-                stats = fetch_light_date(client, d) if light else fetch_full_date(client, d)
-                print(f"[完成] {d}: " + ", ".join(f"{k}={v}" for k, v in stats.items()))
-            except Exception as exc:  # 单日期失败不阻塞其余日期，但报告缺失
-                print(f"[失败] {d}: {exc}")
+        summaries = fetcher.sync_many(
+            wanted, window="all", force=force,
+            only=["daily", "stk_limit"] if light else None)
+        for summary in summaries:
+            counts: dict[str, int] = {}
+            for record in summary["results"].values():
+                counts[record["status"]] = counts.get(record["status"], 0) + 1
+            print(f"[完成] {summary['date']}: "
+                  + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+            readiness = summary["readiness"]
+            if readiness["status"] == "blocked":
+                print(f"  [blocked] 缺 {readiness['blocking']}")
 
-        log = client.write_call_log(dates[0])
+        log = client.write_call_log(wanted[0])
         n_calls = len(client.call_log)
         errors = sum(1 for c in client.call_log if "error" in c)
         print(f"\n调用 {n_calls} 次（含重试），失败 {errors} 次，耗时 {time.monotonic() - t0:.0f}s")
         print(f"调用日志: {log}")
+
+        blocked = [s["date"] for s in summaries if s["readiness"]["status"] == "blocked"]
+        if blocked:
+            raise FetchIncomplete(blocked, summaries[-1]["readiness"])
 
     # ------------------------------------------------------------------ #
     # 加工层
@@ -1528,7 +1540,10 @@ class Scout:
             derived_rows[path.stem] = rows
             derived_files[path.stem] = {**self.ws.artifact_ref(path), "rows": rows}
 
-        gaps: list[str] = []
+        from .fetch import Fetcher
+
+        readiness = Fetcher(workspace=self.ws).status(date)
+        gaps: list[str] = list(readiness["gaps"])
         expected = []
         for name in selectors.get("groups", {}):
             if name != "watchlist":
@@ -1553,16 +1568,9 @@ class Scout:
             path = RAW / api / filename
             key = f"{api}/{filename}"
             if not path.exists():
-                if required or selectors.get("limit_source", {}).get("kpl_enrich", True):
-                    gaps.append(f"raw/{key} 缺失")
                 continue
             rows = len(payload_items(path))
             raw_inputs[key] = {**self.ws.artifact_ref(path), "rows": rows}
-            if required and rows == 0:
-                gaps.append(f"raw/{key} 为空响应")
-            if api == "kpl_list" and rows == 0 \
-                    and selectors.get("limit_source", {}).get("kpl_enrich", True):
-                gaps.append(f"raw/{key} 为空响应（次日增强尚未到位）")
 
         stock_basic = RAW / "stock_basic"
         if not stock_basic.exists() or not any(stock_basic.glob("*.json")):
@@ -1572,13 +1580,19 @@ class Scout:
         derived_code_version = f"scout:{sha256_file(scout_impl)[:16]}"
         generated_day = datetime.now().astimezone().date().isoformat()
         manifest = {
-            "snapshot_version": "s3.0",
+            "snapshot_version": "s3.1",
             "trade_date": date_dash,
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "data_as_of": date_dash,
             "derived_code_version": derived_code_version,
             "backfilled": generated_day != date_dash,
-            "status": "degraded" if gaps else "complete",
+            "status": readiness["status"],
+            "readiness": {
+                "version": readiness.get("readiness_version", "r1.0"),
+                "path": f"data/meta/readiness/{date_dash}.yaml",
+                "blocking": readiness["blocking"],
+                "degraded_by": readiness["degraded_by"],
+            },
             "data_recipe": self.ws.artifact_ref(data_recipe_path),
             "selectors": self.ws.artifact_ref(selectors_path),
             "universe": self.ws.artifact_ref(universe_path),
@@ -1620,6 +1634,12 @@ class Scout:
         started = time.monotonic()
         self.logger.emit(event="start", status="running", **common)
         try:
+            from .fetch import Fetcher
+
+            readiness = Fetcher(workspace=self.ws).status(date)
+            if readiness["status"] == "blocked" and auto_fetch:
+                print(f"[run_date] 数据未就绪，先取数：{readiness['blocking']}")
+                self.fetch_daily([date])
             self.build_snapshot(date, auto_fetch=auto_fetch)
             self.load_warehouse(date)
             self.select_stocks(date)

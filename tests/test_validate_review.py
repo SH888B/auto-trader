@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -57,10 +58,13 @@ V11_REVIEW = {
 def run_validator(review: dict) -> subprocess.CompletedProcess:
     tmp = ROOT / "temp" / "_test_review.json"
     tmp.write_text(json.dumps(review, ensure_ascii=False), encoding="utf-8")
+    # Windows 控制台默认 cp936：显式要求子进程用 UTF-8 输出，
+    # 否则父进程按 UTF-8 解码会 UnicodeDecodeError → stdout=None。
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
         return subprocess.run(
             [sys.executable, str(VALIDATOR), str(tmp)],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", env=env,
         )
     finally:
         tmp.unlink(missing_ok=True)

@@ -103,27 +103,39 @@ def test_finalize_regression_20261028() -> None:
     """重冻结 10-28 快照：数据内容字段必须与基线逐一相等。
 
     允许差异的字段：generated_at / backfilled / derived_code_version / scripts_sha256
-    （代码版本与生成时间按定义变化）。
+    （代码版本与生成时间按定义变化）。s3.1 起 status/gaps 由 readiness 计算，
+    gaps 格式改为 "source: state"，因此不再与旧基线逐字比对，改为断言结构性结果。
     derived_files 的 hash 只比对"稳定表"——经 SELECT * 或 pool 透传的文件
     （amount_top/boards/gain_top/loss_top/pit_top/limit_up/limit_up_focus/
     limit_down/watchlist_today）内含 ingested_at 审计列，任何时刻重跑字节都会变，
     这是原管道既有属性（TODO 已记录：Data Recipe 修订时剔除审计列）。
+
+    注意：finalize 会改写真实 snapshot.yaml，而 Curator 的 digest 会引用其中的
+    gaps；测试结束必须还原，否则用例执行顺序会影响 digest 回归基线。
     """
-    Scout().finalize("20261028")
-    new = yaml.safe_load((ROOT / "data" / "snapshots" / "2026-10-28" / "snapshot.yaml")
-                         .read_text(encoding="utf-8"))
-    old = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))
-    for field in ("snapshot_version", "trade_date", "data_as_of", "status",
-                  "data_recipe", "selectors", "universe", "selectors_version",
-                  "universe_version", "derived_rows", "raw_inputs", "gaps"):
-        assert new[field] == old[field], (
-            f"snapshot 字段漂移：{field}\n新：{new[field]}\n旧：{old[field]}")
-    # 行数全表比对 + 稳定表 hash 比对
-    assert set(new["derived_files"]) == set(old["derived_files"])
-    stable = {"gain_week", "cm20_core", "prev_lu_feedback", "prev_ld_feedback",
-              "index_panel", "ceiling", "carrier_lifecycle"}
-    for name in new["derived_files"]:
-        assert new["derived_files"][name]["rows"] == old["derived_files"][name]["rows"], name
-        if name in stable:
-            assert (new["derived_files"][name]["sha256"]
-                    == old["derived_files"][name]["sha256"]), f"{name} hash 漂移"
+    snapshot_path = ROOT / "data" / "snapshots" / "2026-10-28" / "snapshot.yaml"
+    original = snapshot_path.read_bytes()
+    try:
+        Scout().finalize("20261028")
+        new = yaml.safe_load(snapshot_path.read_text(encoding="utf-8"))
+        old = yaml.safe_load(BASELINE.read_text(encoding="utf-8"))
+        for field in ("trade_date", "data_as_of", "status",
+                      "data_recipe", "selectors", "universe", "selectors_version",
+                      "universe_version", "derived_rows", "raw_inputs"):
+            assert new[field] == old[field], (
+                f"snapshot 字段漂移：{field}\n新：{new[field]}\n旧：{old[field]}")
+        assert new["snapshot_version"] == "s3.1"
+        assert new["status"] == "degraded"
+        assert new["readiness"]["degraded_by"] == ["kpl_list"]
+        assert new["readiness"]["blocking"] == []
+        # 行数全表比对 + 稳定表 hash 比对
+        assert set(new["derived_files"]) == set(old["derived_files"])
+        stable = {"gain_week", "cm20_core", "prev_lu_feedback", "prev_ld_feedback",
+                  "index_panel", "ceiling", "carrier_lifecycle"}
+        for name in new["derived_files"]:
+            assert new["derived_files"][name]["rows"] == old["derived_files"][name]["rows"], name
+            if name in stable:
+                assert (new["derived_files"][name]["sha256"]
+                        == old["derived_files"][name]["sha256"]), f"{name} hash 漂移"
+    finally:
+        snapshot_path.write_bytes(original)

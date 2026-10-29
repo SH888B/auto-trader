@@ -126,7 +126,7 @@ class TestDailyDispatch:
         monkeypatch.setattr("autotrader.pipeline.daily.Daily",
                             lambda *a, **k: recorder)
         assert cli.main(["daily", "prepare", "--as-of", "2026-10-29"]) == 0
-        assert recorder.calls == [("prepare", ("2026-10-29",), {})]
+        assert recorder.calls == [("prepare", ("2026-10-29",), {"allow_degraded": False})]
 
     def test_continue(self, recorder: _Recorder,
                       monkeypatch: pytest.MonkeyPatch) -> None:
