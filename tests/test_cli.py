@@ -2,6 +2,8 @@
 """CLI 测试：参数解析 → 正确的 Scout/Curator 方法分发。"""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import autotrader.cli as cli
@@ -119,8 +121,62 @@ class TestCuratorDispatch:
         ]
 
 
+class TestDailyDispatch:
+    def test_prepare(self, recorder: _Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("autotrader.pipeline.daily.Daily",
+                            lambda *a, **k: recorder)
+        assert cli.main(["daily", "prepare", "--as-of", "2026-10-29"]) == 0
+        assert recorder.calls == [("prepare", ("2026-10-29",), {})]
+
+    def test_continue(self, recorder: _Recorder,
+                      monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("autotrader.pipeline.daily.Daily",
+                            lambda *a, **k: recorder)
+        cli.main(["daily", "continue", "--as-of", "2026-10-28"])
+        assert recorder.calls == [("continue_", ("2026-10-28",), {})]
+
+
+class TestValidateCli:
+    def test_review_ok(self, capsys: pytest.CaptureFixture) -> None:
+        import json as _json
+
+        p = Path("temp/_test_cli_review.json")
+        p.write_text(_json.dumps({"review_version": "v1.1", "as_of": "2026-10-28",
+                                  "market_regime": {"trend_segment": "上升增量",
+                                                    "position": "左脚",
+                                                    "tolerance_level": "中",
+                                                    "tolerance_evidence": ["证据"],
+                                                    "evidence": ["证据"],
+                                                    "confidence": 0.6,
+                                                    "switch_day": {"is_switch_day": False,
+                                                                   "candidates": []}},
+                                  "risks": [],
+                                  "themes": [{"theme_id": "T1", "name": "测试",
+                                              "rhythm_stage": "延续",
+                                              "invalid_if": "证伪",
+                                              "evidence": ["证据"],
+                                              "confidence": 0.6}],
+                                  "carriers": [], "data_gaps": [],
+                                  "watchlist_updates": []},
+                                 ensure_ascii=False), encoding="utf-8")
+        try:
+            assert cli.main(["validate", "review", str(p)]) == 0
+            assert "[OK]" in capsys.readouterr().out
+        finally:
+            p.unlink()
+
+    def test_review_fail(self, capsys: pytest.CaptureFixture) -> None:
+        p = Path("temp/_test_cli_bad.json")
+        p.write_text("{}", encoding="utf-8")
+        try:
+            assert cli.main(["validate", "review", str(p)]) == 1
+            assert "校验失败" in capsys.readouterr().out
+        finally:
+            p.unlink()
+
+
 class TestPlaceholderModules:
-    @pytest.mark.parametrize("module", ["daily", "validate", "score", "logs"])
+    @pytest.mark.parametrize("module", ["score", "logs"])
     def test_returns_2(self, module: str,
                        capsys: pytest.CaptureFixture) -> None:
         assert cli.main([module]) == 2

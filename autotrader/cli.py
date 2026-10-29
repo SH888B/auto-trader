@@ -91,6 +91,56 @@ def _curator_watchlist_apply(args: argparse.Namespace) -> None:
                                       snapshot=args.snapshot)
 
 
+def _daily_prepare(args: argparse.Namespace) -> None:
+    from .pipeline.daily import Daily
+
+    Daily().prepare(args.as_of)
+
+
+def _daily_continue(args: argparse.Namespace) -> None:
+    from .pipeline.daily import Daily
+
+    Daily().continue_(args.as_of)
+
+
+def _validate_review(args: argparse.Namespace) -> int:
+    import json
+
+    from .core import Workspace
+    from .pipeline.validate import validate_review
+
+    result = validate_review(json.loads(Workspace().path(args.path)
+                                       .read_text(encoding="utf-8")))
+    for w in result.warnings:
+        print(f"[警告] {w}")
+    if result.errors:
+        print(f"[校验失败] {args.path}")
+        for e in result.errors:
+            print(f"  - {e}")
+        return 1
+    print(f"[OK] {args.path} 符合 review 语义校验")
+    return 0
+
+
+def _validate_intents(args: argparse.Namespace) -> int:
+    import json
+
+    from .core import Workspace
+    from .pipeline.validate import validate_order_intents
+
+    data = json.loads(Workspace().path(args.path).read_text(encoding="utf-8"))
+    result = validate_order_intents(data)
+    for w in result.warnings:
+        print(f"[警告] {w}")
+    if result.errors:
+        print(f"[校验失败] {args.path}")
+        for e in result.errors:
+            print(f"  - {e}")
+        return 1
+    print(f"[OK] {args.path}（{len(data.get('actions', []))} 个订单意图）")
+    return 0
+
+
 # --------------------------------------------------------------------------- #
 # 占位模块（第 7/8 步注册：daily / validate / score / logs）
 # --------------------------------------------------------------------------- #
@@ -192,10 +242,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--snapshot", help="历史快照路径；默认 target 同级 history/<as_of>.yaml")
     p.set_defaults(handler=_curator_watchlist_apply)
 
+    # ------------------------------ daily ------------------------------ #
+    p_daily = sub.add_parser("daily", help="日常链路：prepare / continue / settle")
+    dsub = p_daily.add_subparsers(dest="command", required=True)
+    p = dsub.add_parser("prepare", help="数据 → Judge 交接包（幂等，可重跑）")
+    p.add_argument("--as-of", required=True, help="交易日 YYYY-MM-DD 或 YYYYMMDD")
+    p.set_defaults(handler=_daily_prepare)
+    p = dsub.add_parser("continue", help="验收 review → Trader 交接包（幂等，可重跑）")
+    p.add_argument("--as-of", required=True, help="交易日 YYYY-MM-DD 或 YYYYMMDD")
+    p.set_defaults(handler=_daily_continue)
+
+    # ------------------------------ validate ------------------------------ #
+    p_validate = sub.add_parser("validate", help="契约校验：review / intents")
+    vsub = p_validate.add_subparsers(dest="command", required=True)
+    p = vsub.add_parser("review", help="Judge review schema + 语义校验")
+    p.add_argument("path", help="review.json 路径（workspace 内）")
+    p.set_defaults(handler=_validate_review)
+    p = vsub.add_parser("intents", help="Trader order_intents schema + 引用校验")
+    p.add_argument("path", help="order_intents.json 路径（workspace 内）")
+    p.set_defaults(handler=_validate_intents)
+
     # ------------------------------ 占位 ------------------------------ #
     for name, help_text in [
-        ("daily", "日常链路：prepare / continue / settle"),
-        ("validate", "契约校验：review / intents"),
         ("score", "机械评分"),
         ("logs", "刷新日志视图"),
     ]:
