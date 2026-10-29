@@ -227,6 +227,52 @@ def _state_freeze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _watchlist_apply(args: argparse.Namespace) -> int:
+    import json
+
+    from .core import Workspace
+    from .watchlist import Watchlist
+
+    review = json.loads(Workspace().path(args.review).read_text(encoding="utf-8"))
+    updates = review.get("watchlist_updates") or []
+    stats = Watchlist().apply(args.experiment, args.owner, args.date, updates,
+                              force=args.force)
+    print(f"[watchlist] {args.date} rows={stats['rows']} "
+          f"add={stats['add']} remove={stats['remove']} update={stats['update']}")
+    return 0
+
+
+def _watchlist_set(args: argparse.Namespace) -> int:
+    from .core import Workspace, load_yaml
+    from .watchlist import Watchlist
+
+    data = load_yaml(Workspace().path(args.file))
+    stocks = data.get("stocks") if isinstance(data, dict) else data
+    if not stocks:
+        print(f"[watchlist] {args.file} 里没有 stocks")
+        return 1
+    rows = Watchlist().set_daily(args.experiment, args.owner, args.date, stocks,
+                                 force=args.force)
+    print(f"[watchlist] {args.date} rows={rows}")
+    return 0
+
+
+def _watchlist_show(args: argparse.Namespace) -> int:
+    from .watchlist import Watchlist
+
+    df = Watchlist().show(args.experiment, args.owner, args.date)
+    print(df.to_string(index=False) if not df.empty else "（空）")
+    return 0
+
+
+def _watchlist_diff(args: argparse.Namespace) -> int:
+    from .watchlist import Watchlist
+
+    df = Watchlist().diff(args.experiment, args.owner, args.start, args.end)
+    print(df.to_string(index=False) if not df.empty else "（无变化）")
+    return 0
+
+
 def _experiment_setup(args: argparse.Namespace) -> None:
     from .experiment import Experiment
 
@@ -430,6 +476,39 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--user", action="store_true", help="只冻结 user watchlist")
     p.add_argument("--portfolio", action="store_true", help="只冻结 portfolio")
     p.set_defaults(handler=_state_freeze)
+
+    # ------------------------------ watchlist ------------------------------ #
+    p_wl = sub.add_parser("watchlist", help="每日全量 watchlist（实验 × 所有者 × 交易日）")
+    wlsub = p_wl.add_subparsers(dest="command", required=True)
+
+    p = wlsub.add_parser("apply", help="按 review 的 watchlist_updates 生成当日全量")
+    p.add_argument("--review", required=True, help="review.json 路径")
+    p.add_argument("--date", required=True, help="YYYYMMDD")
+    p.add_argument("--experiment", default="live", help="实验号，默认 live")
+    p.add_argument("--owner", default="judge", choices=["judge", "user"])
+    p.add_argument("--force", action="store_true", help="允许重写当日")
+    p.set_defaults(handler=_watchlist_apply)
+
+    p = wlsub.add_parser("set", help="直接写入某日全量清单（YAML: stocks: [...]）")
+    p.add_argument("--file", required=True)
+    p.add_argument("--date", required=True, help="YYYYMMDD")
+    p.add_argument("--experiment", default="live")
+    p.add_argument("--owner", default="user", choices=["judge", "user"])
+    p.add_argument("--force", action="store_true", help="允许重写当日")
+    p.set_defaults(handler=_watchlist_set)
+
+    p = wlsub.add_parser("show", help="查看某日全量")
+    p.add_argument("--date", required=True)
+    p.add_argument("--experiment", default="live")
+    p.add_argument("--owner", default="judge", choices=["judge", "user"])
+    p.set_defaults(handler=_watchlist_show)
+
+    p = wlsub.add_parser("diff", help="对比两天的进/出/改")
+    p.add_argument("--start", required=True, help="较早日期 YYYYMMDD")
+    p.add_argument("--end", required=True, help="较晚日期 YYYYMMDD")
+    p.add_argument("--experiment", default="live")
+    p.add_argument("--owner", default="judge", choices=["judge", "user"])
+    p.set_defaults(handler=_watchlist_diff)
 
     # ------------------------------ 占位 ------------------------------ #
     for name, help_text in [

@@ -14,7 +14,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -108,6 +108,30 @@ def load_json(path: str | Path) -> Any:
 def dump_yaml(data: Any) -> str:
     """按工作区惯例序列化 YAML（Unicode 原样、保持键序）。"""
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+
+
+# ---------------------------------------------------------------------------
+# 日期规范：对外唯一格式 YYYYMMDD（如 20261028）
+# ---------------------------------------------------------------------------
+
+def trade_date(value: str | date | datetime) -> str:
+    """把日期统一成 ``YYYYMMDD`` 字符串；非法输入抛 WorkspaceError。
+
+    这是 V5 起的唯一对外格式：CLI 参数、目录名、raw 文件名、库里 trade_date
+    列全部一致，不再混用 ``2026-10-28``。
+    """
+    if isinstance(value, datetime):
+        value = value.date()
+    if isinstance(value, date):
+        return value.strftime("%Y%m%d")
+    text = str(value).strip().replace("-", "").replace("/", "")
+    if len(text) != 8 or not text.isdigit():
+        raise WorkspaceError(f"trade_date 必须是 YYYYMMDD：{value!r}")
+    try:
+        datetime.strptime(text, "%Y%m%d")
+    except ValueError as exc:
+        raise WorkspaceError(f"trade_date 不是合法日期：{value!r}") from exc
+    return text
 
 
 # ---------------------------------------------------------------------------
