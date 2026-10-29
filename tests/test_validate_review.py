@@ -40,7 +40,7 @@ V11_REVIEW = {
     "risks": [],
     "themes": [
         {"theme_id": "T-robots", "name": "机器人", "rhythm_stage": "首分",
-         "stage_basis": "D1 大阳启动、D2 大阳延续、D3 盘中分歧为三天组合K中两根大阳线后的第一次分歧",
+         "stage_basis": "D1 大阳启动、D2 延续、D3 盘中分歧为组合K后的第一次分歧",
          "board_position": "主线", "strength_evidence": "强度票顶一字",
          "is_switch_window": True, "competitors": [],
          "evidence": ["e"], "invalid_if": "次日不能修复", "confidence": 0.7}
