@@ -1,0 +1,9 @@
+version: d1.0
+description: Scout 标准数据配方；Agent 展示参数不属于本文件
+selectors: configs/data/selectors.yaml
+universe: configs/data/universe.yaml
+snapshot_root: data/snapshots
+warehouse: data/warehouse.duckdb
+raw_root: data/raw
+curated_root: data/curated
+point_in_time: true

@@ -6,7 +6,8 @@ state/
 runs/
 logs/
 # 生成数据（raw/curated/snapshots/数仓，各自由 Scout 重建）
-data/
+# 必须锚定根目录：否则 configs/data/ 会被一并忽略，数据契约进不了仓库。
+/data/
 # 私有研究素材
 experiments/
 reference/

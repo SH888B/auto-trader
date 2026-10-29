@@ -1,0 +1,119 @@
+# ============================================================================
+# sources.yaml —— 数据源契约（src1.0）
+#
+# 每个接口声明：怎么调、怎么分页、期望什么、什么时候可用、缺了算几级。
+# 这份文件是取数层唯一的"接口知识"，代码不再硬编码 _MIN_ROWS / DAILY_APIS。
+#
+# class 语义：
+#   block     缺失 → readiness=blocked，不出快照
+#   enrich    缺失 → readiness=degraded，出快照但缺口进 manifest
+#   optional  缺失 → 不标记
+#
+# avail.after 是"该交易日的这一份数据最早何时可用"（本地时间 +08:00）。
+# confidence 只是标签：doc=照官方文档填，measured=已用账本 first_ok_at 校准。
+# ============================================================================
+version: src1.0
+timezone: "Asia/Shanghai"
+
+defaults:
+  retry: {attempts: 4, backoff: [15, 45, 120, 300], jitter: 0.25}
+  http: {connect_timeout: 5, read_timeout: 60}
+  confirm_gap_minutes: 10
+
+apis:
+  # ---------------------------------------------------------------- 行情（晚间）
+  daily:
+    api: daily
+    window: evening
+    key: "{date}"
+    params: {trade_date: "{date}"}
+    page: {size: 5000, max_pages: 4, pk: [ts_code]}
+    expect:
+      min_rows: 4500
+      max_rows: 7000
+      fields: [ts_code, trade_date, close, pre_close, pct_chg, amount]
+    avail: {day_offset: 0, after: "15:30", confidence: doc}
+    retry: {read_timeout: 180}
+    class: block
+
+  daily_basic:
+    api: daily_basic
+    window: evening
+    key: "{date}"
+    params: {trade_date: "{date}"}
+    page: {size: 5000, max_pages: 4, pk: [ts_code]}
+    expect: {min_rows: 4000, fields: [ts_code, trade_date, close]}
+    avail: {day_offset: 0, after: "17:00", confidence: doc}
+    class: optional
+
+  stk_limit:
+    api: stk_limit
+    window: evening
+    key: "{date}"
+    params: {trade_date: "{date}"}
+    expect:
+      min_rows: 4000
+      fields: [ts_code, trade_date, up_limit, down_limit]
+    avail: {day_offset: 0, after: "17:00", confidence: doc}
+    class: block
+
+  # ------------------------------------------------------- 涨跌停结构（晚间）
+  limit_list_d_up:
+    api: limit_list_d
+    window: evening
+    key: "{date}_up"
+    params: {trade_date: "{date}", limit_type: "U"}
+    expect:
+      min_rows: 1
+      fields: [ts_code, trade_date, limit_times, open_times, up_stat]
+    avail: {day_offset: 0, after: "17:00", confidence: doc}
+    class: block
+
+  limit_list_d_down:
+    api: limit_list_d
+    window: evening
+    key: "{date}_down"
+    params: {trade_date: "{date}", limit_type: "D"}
+    expect:
+      min_rows: 1
+      allow_empty: true          # 强势日没有跌停是合法结果，不重试
+      fields: [ts_code, trade_date]
+    avail: {day_offset: 0, after: "17:00", confidence: doc}
+    class: enrich
+
+  limit_step:
+    api: limit_step
+    window: evening
+    key: "{date}"
+    params: {trade_date: "{date}"}
+    expect: {min_rows: 1, allow_empty: true, fields: [ts_code, trade_date, nums]}
+    avail: {day_offset: 0, after: "18:00", confidence: doc}
+    class: optional
+
+  # ------------------------------------------------------------ 板块榜（晚间）
+  limit_cpt_list:
+    api: limit_cpt_list
+    window: evening
+    endpoint: fallback
+    key: "{date}"
+    params: {trade_date: "{date}"}
+    expect: {min_rows: 5, allow_empty: true, fields: [ts_code, trade_date, name]}
+    avail: {day_offset: 0, after: "18:00", confidence: doc}
+    class: enrich
+
+  # ------------------------------------------------- 开盘啦（次日早间增强）
+  kpl_list:
+    api: kpl_list
+    window: morning
+    endpoint: fallback
+    key: "{date}_涨停"
+    params: {trade_date: "{date}", tag: "涨停"}
+    expect:
+      min_rows: 1
+      allow_empty: true
+      empty_is_gap: true      # 空 = 次日增强未到位，算 degraded
+      fields: [ts_code, trade_date, tag]
+    # 收盘当晚不抓（实测 23:37 为空，白耗积分）：只在次日 08:30 后抓。
+    # revision/v1-v2 机制见 DATA-ROBUSTNESS-PLAN.md §3.3，PR-2 落地。
+    avail: {day_offset: 1, after: "08:30", confidence: measured}
+    class: enrich

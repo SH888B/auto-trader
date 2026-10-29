@@ -1,0 +1,34 @@
+# universe.yaml —— Scout 股票池与交易规则校验配置（单一事实源）
+# 框架新增市场/板块时，先改这里，check_contracts 会对照 framework 要求做漂移检查
+version: u0.0
+updated: 2026-10-26
+change_log:
+  - { version: u0.0, date: 2026-10-26, reason: "初始版本：沪深主板/创业板/科创板" }
+
+markets:
+  SSE_MAIN:                      # 上交所主板（60xxxx）
+    code_prefix: ["600", "601", "603", "605"]
+    price_limit_pct: 10
+    min_lot: 100
+  SZSE_MAIN:                     # 深交所主板（000/001/002/003）
+    code_prefix: ["000", "001", "002", "003"]
+    price_limit_pct: 10
+    min_lot: 100
+  ChiNext:                       # 创业板（30xxxx，20cm）
+    code_prefix: ["300", "301"]
+    price_limit_pct: 20
+    min_lot: 100
+  STAR:                          # 科创板（68xxxx，20cm）
+    code_prefix: ["688", "689"]
+    price_limit_pct: 20
+    min_lot: 200
+  # BSE:                         # 北交所（8xxxxx/4xxxxx，30cm）——预留，未启用
+  #   code_prefix: ["8", "43", "87", "92"]
+  #   price_limit_pct: 30
+  #   min_lot: 100
+
+exclusions:
+  note: 过滤规则
+  st_stock: true                 # ST/*ST 默认剔除（框架若要交易需显式放行）
+  suspended: true                # 停牌剔除
+  listing_days_min: 30           # 次新股至少上市30日（打新一字段不参与首分）

@@ -1,0 +1,113 @@
+# selectors.yaml —— Scout 每日筛选配置（与代码分离，改这里不用改脚本）
+# 版本纪律：任何变更 bump version 并在末尾记录原因（见 ARCHITECTURE.md 第四节）
+version: s0.8
+updated: 2026-10-28
+change_log:
+  - { version: s0.8, date: 2026-10-28, reason: "用户拍板：gain_week 源数据 n 30→100（视图展示 60 交给 View Recipe）" }
+  - { version: s0.7, date: 2026-10-28, reason: "用户人工审核 digest 拍板：boards_selection_n 10→20（视图展示 15 交给 View Recipe）；新增 limit_up_focus 涨停聚焦表（封单最大/最高板/20cm连板/行业最高板=题材代理/首板三王/20cm）；pit_top 口径已由高低振幅改为收盘距高点回落" }
+  - { version: s0.5, date: 2026-10-28, reason: "lifecycle lc0.1→lc0.2：单波定义改破5日线（用户拍板 2026-10-28，'一波上涨未破五日线=同一波'）；级联重排，退潮·破5日线居首；20261027 回放验收 7/7 命中" }
+  - { version: s0.4, date: 2026-10-27, reason: "E004 延续：新增 ceiling（天花板两行，F013 客观层）+ lifecycle（载体生命周期表客观列，F012 记录层）；程序不判模仿关系，template_of/stage/ttl 由 Judge 维护在 watchlist" }
+  - { version: s0.3, date: 2026-10-27, reason: "E003 复盘框架 v2：指数面板扩为7只（全A/科创50/银行/中证2000）；新增坑货榜/周涨幅/20cm中军三组；板块榜 join 三分法分类" }
+  - { version: s0.2, date: 2026-10-27, reason: "用户拍板：涨停打标不再本地计算，主源切官方 limit_list_d + kpl 增强；新增 limit_source/kpl_enrich 配置项" }
+  - { version: s0.1, date: 2026-10-26, reason: "板块口径定为同花顺（limit_cpt_list+ths_member）；新增板块规模阈值 concept_min_cons=15（用户拍板）" }
+  - { version: s0.0, date: 2026-10-26, reason: "初始版本，按 我知道检查清单.md 第四层 8 组设计" }
+
+# 涨停口径（用户拍板 2026-10-27）：不再本地比对 stk_limit 计算，直接用数据源
+# primary=official：主源官方 limit_list_d（当晚可得，非 ST，字段：开板次数/几天几板/封单金额/封板时间/市值/换手）
+# primary=local ：旧口径保留作 fallback（本地 stk_limit 比对 close 判定，含 ST/北交所，字段较粗）
+# 注：ST 股官方不覆盖、用户拍板不单独补齐；kpl_enrich=true 时 kpl 名单里的 ST 会带题材出现
+limit_source:
+
+  primary: official
+  kpl_enrich: true        # true=次日 6:00 kpl 数据到位后自动增强（题材/封单/最大封单/连板状态），digest 记 v2
+
+# 板块口径：同花顺概念板块（正式）；开盘啦 kpl_list 仅用于涨停细节
+concept_source: ths
+concept_min_cons: 15          # 成分股少于该数的板块一律剔除
+boards_selection_n: 20        # Scout 标准表保留的板块数；Agent 展示数由 configs/digest 决定
+
+# ---- E004 延续（假设 H4/H5，对应因子 F012/F013，2026-10-27 立项）----
+# 设计原则：程序只下"能被数字判定的"结论；模仿关系（template_of/stage/ttl）由 Judge 每日
+# 维护在 watchlist.yaml，Scout 只回读展示，绝不自动猜测——防止污染 F012 第一阶段的标注样本。
+# 剧幕规则 lc0.2（用户拍板 2026-10-28：单波=未破5日线），20261027 回放验收 7/7 命中
+# （大业=单波·二波尝试 / 九阳=退潮·破5日线 / 赛福天=一波加速+软开板?+巨量×5.1 / 华阳=主升分歧+断板第一天 /
+#  凡拓·宇树=主升分歧 / 上海九百=一波加速5连板）。
+ceiling:
+  version: c0.1
+  window_days: 20             # 天花板滚动窗口（交易日）
+  cm_board_min_pct: 15        # 20cm 板判定：涨停日涨幅 ≥15%（10cm 主板约 10%）
+
+lifecycle:
+  version: lc0.2
+  lookback_days: 12           # 剧幕判定回看交易日数
+  board_min: 2                # 进入判定的高板门槛（曾达到的连板数）
+  break_min_boards: 3         # 断板日定义：连板数 ≥N 后次日无涨停
+  wave_ma: 5                  # 单波定义（用户拍板 2026-10-28）：一波上涨未破该日均线=同一波；
+                               # 收盘破线=波结束；破线后重新站上走强=新一波（二波）。边界只认均线，不认断板/横盘
+  platform_band_pct: 8        # 高位平台：收盘距断板日收盘 ±8% 内
+  platform_shrink: 0.6        # 平台缩量阈值：量 < 断板日量 ×0.6
+  wave2_min_gain: 8           # 二波尝试/重启：断板日后首个涨幅 ≥N% 的阳线（单波内=尝试；破线后=重启）
+  drawdown_exit_pct: 12       # 退潮辅助条件：自窗口高点回撤 >N%（主条件=收盘破5日线）
+  stagnate_days: 3            # 滞涨：距高点 ≥N 日未新高且期间累计涨幅 <3%
+  diverge_min_pct: -2.5       # 主升分歧：非连板票当日跌幅 ≤N% 且近5日有涨停
+  soft_open_fd_ratio: 0.5     # 软开板（F008 演进）：封单环比 <50%……
+  soft_open_amt_ratio: 2.0    #   ……且量环比 >200%（名义未开板、实质板上卖压被硬吃）
+
+groups:
+  watchlist:
+    source: state/watchlist/judge/current.yaml
+    note: 30-50只打标关注列表，Judge每日更新
+  amount_top:
+    rank: amount
+    n: 100
+    note: 成交额前100
+  gain_top:
+    rank: pct_chg
+    n: 100
+    note: 涨幅前100
+  loss_top:
+    rank: pct_chg
+    n: 50
+    order: asc
+    note: 跌幅前50
+  limit_up:
+    source: stk_limit
+    note: 今日涨停（含一字/炸板标记）
+  limit_down:
+    source: stk_limit
+    note: 今日跌停
+  prev_lu_feedback:
+    source: prev_day.limit_up
+    metric: open_vs_preclose
+    note: 昨日涨停今日反馈（溢价/核按钮）
+  prev_ld_feedback:
+    source: prev_day.limit_down
+    metric: pct_chg
+    note: 昨日跌停今日反馈
+  index_panel:
+    tickers: ["399317.SZ", "000001.SH", "399006.SZ", "000688.SH", "399986.SZ", "932000.CSI", "399001.SZ"]
+    metrics: [trend_5_10_20, candle_pattern, volume_ratio_vs_5d]
+    pattern_flags: [大阳线, 大阴线, 长下影, 长上影]
+    note: 第一层指数量能（E003：全A代表+结构指数，结构对比回答风偏问题）
+  pit_top:
+    rank: close_vs_high_drawdown   # 当日坑货榜：收盘距高点回落%（2026-10-28 修订，原为高低振幅）
+    n: 20
+    min_amount_yi: 1.0         # 成交额 ≥1亿才上榜（排除无量噪声）
+    note: 坑货定板块节奏；收盘距当日高点回落越狠，追高盘被套越惨
+  limit_up_focus:
+    fd_top_n: 10             # ① 封单最大的强度品种
+    industry_leader_n: 15    # ② 每个行业（题材代理）连板最高的
+    first_board_each_n: 2    # ③ 首板中封单最大/成交额最高/市值最大各取
+    note: 涨停聚焦四规则（用户拍板 2026-10-28）：封单最大/最高板/20cm连板/行业最高板(题材代理)/首板三王/20cm；
+          行业≠题材，真正的"每个题材最高"依赖板块成员映射（get_theme_members，P1 问题清单 #5）
+  gain_week:
+    source: gain_periods       # 用 curated 的近5日涨幅
+    window: 5
+    n: 100
+    note: 周涨幅榜，源数据前100（用户拍板 s0.8），视图展示 60；查漏补缺近期强弱
+  cm20_core:
+    prefix: ["300", "301", "688", "689"]   # 20cm 象限（F007）
+    min_gain20_pct: 20        # 近20日涨幅 ≥20%
+    min_amount5_yi: 5.0       # 近5日均成交额 ≥5亿（容量=中军门槛）
+    n: 20
+    note: 20cm题材中军候选：非涨停强趋势票，分歧日低吸优先象限
